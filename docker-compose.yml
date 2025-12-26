@@ -1,0 +1,180 @@
+services:
+  # 1. Identity and Access Management
+  keycloak:
+    restart: always
+    container_name: keycloak
+    image: keycloak/keycloak:24.0
+    command: start-dev
+    environment:
+      KC_HOSTNAME_PORT: "8080"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: adminpassword
+
+      KC_DB: postgres
+      KC_DB_USERNAME: ${KC_DB_USERNAME}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_DB_URL: ${KC_DB_URL}
+      KC_DB_SCHEMA: keycloak
+
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_STRICT: false
+      KC_HTTP_ENABLED: true
+      KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HEALTH_ENABLED: true
+      KC_METRICS_ENABLED: true
+      KC_LOG_LEVEL: INFO
+      KC_PROXY_HEADERS: xforwarded
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://0.0.0.0:8080/realms/master || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saas-network
+
+  # 2. Object Storage (S3 Compatible)
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # MinIO API port
+      - "9001:9001" # MinIO Console/Browser UI port
+    volumes:
+      - minio_data:/data
+    networks:
+      - saas-network
+
+  # 3. Messaging / Broker
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rabbitmq
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+    ports:
+      - "5672:5672" # Standard AMQP port
+      - "15672:15672" # Management UI port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - saas-network
+
+  # 4. Antivirus Service (ClamAV)
+  clamav:
+    restart: always
+    container_name: clamav
+    image: clamav/clamav-debian:1.5
+    ports:
+      - "3310:3310"
+    networks:
+      - saas-network
+
+  # 5. Logic / Orchestration
+  nodered:
+    image: nodered/node-red:4.1.2
+    container_name: node-red
+    restart: always
+    ports:
+      - "1880:1880"
+    environment:
+      - TZ=Europe/Athens
+    volumes:
+      - nodered_data:/data
+    depends_on:
+      - rabbitmq
+      - minio
+    networks:
+      - saas-network
+
+  # 6. Dashboard / IoT Platform
+  thingsboard:
+    restart: always
+    container_name: thingsboard
+    image: thingsboard/tb-postgres:3.8.1
+    ports:
+      - "8070:9090"
+      - "1883:1883"
+      - "7070:7070"
+      - "5683-5688:5683-5688/udp"
+    environment:
+      TB_QUEUE_TYPE: rabbitmq
+      TB_QUEUE_RABBIT_MQ_USERNAME: user
+      TB_QUEUE_RABBIT_MQ_PASSWORD: password
+      TB_QUEUE_RABBIT_MQ_HOST: rabbitmq
+      TB_QUEUE_RABBIT_MQ_PORT: 5672
+    volumes:
+      - thingsboard_data:/data
+      - thingsboard_logs:/var/log/thingsboard
+    networks:
+      - saas-network
+
+  # 7. Backend API
+  api:
+    container_name: securedrop-api
+    build:
+      context: ./securedrop-api
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./securedrop-api/.env
+    volumes:
+      - ./securedrop-api:/app
+      - /app/node_modules
+    depends_on:
+      - keycloak
+      - minio
+    networks:
+      - saas-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 8. Web App (Frontend)
+  webapp:
+    container_name: securedrop-webapp
+    build:
+      context: ./securedrop
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "8081:8081"
+    env_file:
+      - ./securedrop/.env
+    volumes:
+      - ./securedrop:/app
+      - /app/node_modules
+    depends_on:
+      # - api
+      - keycloak
+    networks:
+      - saas-network
+
+networks:
+  saas-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  nodered_data:
+    driver: local
+  thingsboard_data:
+    driver: local
+  thingsboard_logs:
+    driver: local
