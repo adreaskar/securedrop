@@ -1,5 +1,6 @@
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
+const multer = require("multer");
 const verifyToken = require("../middleware/auth");
 const minioService = require("../services/minio");
 const db = require("../services/database");
@@ -7,69 +8,47 @@ const config = require("../config");
 
 const router = express.Router();
 
-// POST /api/files/upload-url - Get pre-signed upload URL
-router.post("/upload-url", verifyToken, async (req, res) => {
-  try {
-    const { fileName, fileType } = req.body;
+// Configure multer for memory storage
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: config.maxFileSize, // 50MB default
+  },
+});
 
-    if (!fileName || !fileType) {
-      return res
-        .status(400)
-        .json({ error: "fileName and fileType are required" });
+// POST /api/files/upload - Upload file directly to backend
+router.post("/upload", verifyToken, upload.single("file"), async (req, res) => {
+  try {
+    const file = req.file;
+    const { recipientEmail, message } = req.body;
+
+    if (!file) {
+      return res.status(400).json({ error: "No file provided" });
+    }
+
+    if (!recipientEmail) {
+      return res.status(400).json({ error: "recipientEmail is required" });
     }
 
     // Generate unique file ID
     const fileId = uuidv4();
+    const objectName = `${req.user.id}/${fileId}/${file.originalname}`;
 
-    // Generate pre-signed upload URL
-    const { uploadUrl, objectName } = await minioService.generateUploadUrl(
-      req.user.id,
-      fileId,
-      fileName
-    );
-
-    res.json({
-      uploadUrl,
-      fileId,
+    // Upload file to MinIO quarantine bucket
+    await minioService.uploadFile(
+      config.minio.buckets.quarantine,
       objectName,
-    });
-  } catch (error) {
-    console.error("Error generating upload URL:", error);
-    res.status(500).json({ error: "Failed to generate upload URL" });
-  }
-});
-
-// POST /api/files/transfer - Create file transfer record
-router.post("/transfer", verifyToken, async (req, res) => {
-  try {
-    const { fileId, fileName, fileSize, fileType, recipientEmail, message } =
-      req.body;
-
-    if (!fileId || !fileName || !fileSize || !fileType || !recipientEmail) {
-      return res.status(400).json({
-        error:
-          "fileId, fileName, fileSize, fileType, and recipientEmail are required",
-      });
-    }
-
-    // Validate file size
-    if (fileSize > config.maxFileSize) {
-      return res.status(400).json({
-        error: `File size exceeds maximum allowed size of ${
-          config.maxFileSize / (1024 * 1024)
-        }MB`,
-      });
-    }
-
-    // Create object name (same format as generateUploadUrl)
-    const objectName = `${req.user.id}/${fileId}/${fileName}`;
+      file.buffer,
+      file.size,
+      file.mimetype
+    );
 
     // Create file transfer record
     const fileTransfer = await db.createFileTransfer({
       fileId,
-      fileName,
-      fileSize,
-      fileType,
+      fileName: file.originalname,
+      fileSize: file.size,
+      fileType: file.mimetype,
       objectName,
       senderId: req.user.id,
       senderEmail: req.user.email,
@@ -77,8 +56,7 @@ router.post("/transfer", verifyToken, async (req, res) => {
       message,
     });
 
-    // TODO: Trigger virus scan (ClamAV) - implement later
-    // For now, auto-approve for testing
+    // TODO: Trigger virus scan (ClamAV)
     // await triggerVirusScan(fileId);
 
     res.status(201).json({
@@ -95,8 +73,8 @@ router.post("/transfer", verifyToken, async (req, res) => {
       senderEmail: fileTransfer.sender_email,
     });
   } catch (error) {
-    console.error("Error creating file transfer:", error);
-    res.status(500).json({ error: "Failed to create file transfer" });
+    console.error("Error uploading file:", error);
+    res.status(500).json({ error: "Failed to upload file" });
   }
 });
 
@@ -150,8 +128,8 @@ router.get("/received", verifyToken, async (req, res) => {
   }
 });
 
-// GET /api/files/:fileId/download-url - Get pre-signed download URL
-router.get("/:fileId/download-url", verifyToken, async (req, res) => {
+// GET /api/files/:fileId/download - Download file
+router.get("/:fileId/download", verifyToken, async (req, res) => {
   try {
     const { fileId } = req.params;
 
@@ -175,15 +153,25 @@ router.get("/:fileId/download-url", verifyToken, async (req, res) => {
       });
     }
 
-    // Generate pre-signed download URL
-    const downloadUrl = await minioService.generateDownloadUrl(
+    // Stream file from MinIO
+    const stream = await minioService.downloadFile(
+      config.minio.buckets.approved,
       fileTransfer.object_name
     );
 
-    res.json({ downloadUrl });
+    // Set headers for file download
+    res.setHeader("Content-Type", fileTransfer.file_type);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileTransfer.file_name}"`
+    );
+    res.setHeader("Content-Length", fileTransfer.file_size);
+
+    // Pipe the stream to response
+    stream.pipe(res);
   } catch (error) {
-    console.error("Error generating download URL:", error);
-    res.status(500).json({ error: "Failed to generate download URL" });
+    console.error("Error downloading file:", error);
+    res.status(500).json({ error: "Failed to download file" });
   }
 });
 

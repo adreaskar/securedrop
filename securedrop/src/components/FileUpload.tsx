@@ -12,11 +12,7 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import {
-  getUploadUrl,
-  uploadFileToMinIO,
-  createFileTransfer,
-} from "@/lib/minio";
+import { uploadFile } from "@/lib/minio";
 import { z } from "zod";
 
 const uploadSchema = z.object({
@@ -36,6 +32,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+
   const { user, token } = useAuth();
   const { toast } = useToast();
 
@@ -53,6 +50,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       setFile(e.dataTransfer.files[0]);
     }
@@ -66,6 +64,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!file || !user || !token) return;
 
     try {
@@ -84,28 +83,8 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     setUploading(true);
 
     try {
-      // Step 1: Get pre-signed upload URL from backend
-      const { uploadUrl, fileId } = await getUploadUrl(
-        file.name,
-        file.type || "application/octet-stream",
-        token
-      );
-
-      // Step 2: Upload file to MinIO
-      await uploadFileToMinIO(uploadUrl, file);
-
-      // Step 3: Create file transfer record
-      await createFileTransfer(
-        {
-          fileId,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type || "application/octet-stream",
-          recipientEmail: recipientEmail.trim().toLowerCase(),
-          message: message.trim() || undefined,
-        },
-        token
-      );
+      // Upload file directly to backend (single step!)
+      await uploadFile(file, recipientEmail.trim(), message.trim(), token);
 
       toast({
         title: "File uploaded!",
@@ -123,7 +102,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       toast({
         title: "Upload failed",
         description:
-          error.response?.data?.message ||
+          error.response?.data?.error ||
           error.message ||
           "Failed to upload file",
         variant: "destructive",

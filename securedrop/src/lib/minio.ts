@@ -3,11 +3,6 @@ import axios from "axios";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
 
-export interface UploadUrlResponse {
-  uploadUrl: string;
-  fileId: string;
-}
-
 export interface FileMetadata {
   id: string;
   fileName: string;
@@ -22,58 +17,28 @@ export interface FileMetadata {
 }
 
 /**
- * Get a pre-signed URL for uploading a file to MinIO
+ * Upload file directly to backend API
  */
-export const getUploadUrl = async (
-  fileName: string,
-  fileType: string,
-  token: string
-): Promise<UploadUrlResponse> => {
-  const response = await axios.post(
-    `${API_BASE_URL}/files/upload-url`,
-    { fileName, fileType },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
-  return response.data;
-};
-
-/**
- * Upload file to MinIO using pre-signed URL
- */
-export const uploadFileToMinIO = async (
-  uploadUrl: string,
-  file: File
-): Promise<void> => {
-  await axios.put(uploadUrl, file, {
-    headers: {
-      "Content-Type": file.type || "application/octet-stream",
-    },
-  });
-};
-
-/**
- * Create file transfer record in backend
- */
-export const createFileTransfer = async (
-  data: {
-    fileId: string;
-    fileName: string;
-    fileSize: number;
-    fileType: string;
-    recipientEmail: string;
-    message?: string;
-  },
+export const uploadFile = async (
+  file: File,
+  recipientEmail: string,
+  message: string,
   token: string
 ): Promise<FileMetadata> => {
-  const response = await axios.post(`${API_BASE_URL}/files/transfer`, data, {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("recipientEmail", recipientEmail);
+  if (message) {
+    formData.append("message", message);
+  }
+
+  const response = await axios.post(`${API_BASE_URL}/files/upload`, formData, {
     headers: {
       Authorization: `Bearer ${token}`,
+      "Content-Type": "multipart/form-data",
     },
   });
+
   return response.data;
 };
 
@@ -104,31 +69,17 @@ export const getReceivedFiles = async (
 };
 
 /**
- * Get download URL for an approved file
- */
-export const getDownloadUrl = async (
-  fileId: string,
-  token: string
-): Promise<{ downloadUrl: string }> => {
-  const response = await axios.get(
-    `${API_BASE_URL}/files/${fileId}/download-url`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
-  return response.data;
-};
-
-/**
- * Download file from MinIO
+ * Download file
  */
 export const downloadFile = async (
-  downloadUrl: string,
-  fileName: string
+  fileId: string,
+  fileName: string,
+  token: string
 ): Promise<void> => {
-  const response = await axios.get(downloadUrl, {
+  const response = await axios.get(`${API_BASE_URL}/files/${fileId}/download`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
     responseType: "blob",
   });
 

@@ -29,42 +29,26 @@ async function initBuckets() {
   }
 }
 
-// Generate pre-signed PUT URL for file upload
-async function generateUploadUrl(
-  userId,
-  fileId,
-  fileName,
-  expirySeconds = 86400
-) {
-  const objectName = `${userId}/${fileId}/${fileName}`;
-  const bucket = config.minio.buckets.quarantine;
-
+// Upload file to MinIO
+async function uploadFile(bucket, objectName, buffer, size, contentType) {
   try {
-    const uploadUrl = await minioClient.presignedPutObject(
-      bucket,
-      objectName,
-      expirySeconds
-    );
-    return { uploadUrl, objectName };
+    await minioClient.putObject(bucket, objectName, buffer, size, {
+      "Content-Type": contentType,
+    });
+    console.log(`✓ Uploaded file to ${bucket}: ${objectName}`);
   } catch (err) {
-    console.error("Error generating upload URL:", err);
+    console.error("Error uploading file:", err);
     throw err;
   }
 }
 
-// Generate pre-signed GET URL for file download
-async function generateDownloadUrl(objectName, expirySeconds = 86400) {
-  const bucket = config.minio.buckets.approved;
-
+// Download file from MinIO (returns stream)
+async function downloadFile(bucket, objectName) {
   try {
-    const downloadUrl = await minioClient.presignedGetObject(
-      bucket,
-      objectName,
-      expirySeconds
-    );
-    return downloadUrl;
+    const stream = await minioClient.getObject(bucket, objectName);
+    return stream;
   } catch (err) {
-    console.error("Error generating download URL:", err);
+    console.error("Error downloading file:", err);
     throw err;
   }
 }
@@ -105,8 +89,8 @@ async function getFileMetadata(bucket, objectName) {
 module.exports = {
   minioClient,
   initBuckets,
-  generateUploadUrl,
-  generateDownloadUrl,
+  uploadFile,
+  downloadFile,
   moveFile,
   getFileMetadata,
 };

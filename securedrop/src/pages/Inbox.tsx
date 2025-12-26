@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  getReceivedFiles,
-  getDownloadUrl,
-  downloadFile,
-  FileMetadata,
-} from "@/lib/minio";
+import { getReceivedFiles, downloadFile, FileMetadata } from "@/lib/minio";
 import {
   Loader2,
   File,
@@ -75,11 +70,8 @@ export default function Inbox() {
     if (!token) return;
 
     setDownloading(file.id);
-
     try {
-      const { downloadUrl } = await getDownloadUrl(file.id, token);
-      await downloadFile(downloadUrl, file.fileName);
-
+      await downloadFile(file.id, file.fileName, token);
       toast({
         title: "Download started",
         description: `Downloading ${file.fileName}`,
@@ -89,7 +81,7 @@ export default function Inbox() {
       toast({
         title: "Download failed",
         description:
-          error.response?.data?.message ||
+          error.response?.data?.error ||
           error.message ||
           "Failed to download file",
         variant: "destructive",

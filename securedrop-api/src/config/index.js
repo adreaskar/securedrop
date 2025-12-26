@@ -33,8 +33,8 @@ module.exports = {
     database: process.env.DB_NAME || "securedrop",
     user: process.env.DB_USER || "admin",
     password: process.env.DB_PASSWORD || "adminpassword",
-    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false, // Add this
-    connectionString: process.env.SUPABASE_DB_URL, // Add this
+    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
+    connectionString: process.env.SUPABASE_DB_URL,
   },
 
   // CORS

@@ -30,17 +30,27 @@ const verifyToken = (req, res, next) => {
 
   const token = authHeader.substring(7);
 
+  // Accept both internal (keycloak) and external (localhost) issuer URLs
+  const internalIssuer = `${config.keycloak.url}/realms/${config.keycloak.realm}`;
+  const externalIssuer = `http://localhost:8080/realms/${config.keycloak.realm}`;
+
   jwt.verify(
     token,
     getKey,
     {
-      issuer: `${config.keycloak.url}/realms/${config.keycloak.realm}`,
       algorithms: ["RS256"],
+      // Don't validate issuer here, we'll check it manually
     },
     (err, decoded) => {
       if (err) {
         console.error("Token verification failed:", err.message);
         return res.status(401).json({ error: "Invalid token" });
+      }
+
+      // Manually validate issuer (accept both internal and external)
+      if (decoded.iss !== internalIssuer && decoded.iss !== externalIssuer) {
+        console.error("Invalid issuer:", decoded.iss);
+        return res.status(401).json({ error: "Invalid token issuer" });
       }
 
       // Attach user info to request
