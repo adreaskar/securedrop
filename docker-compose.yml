@@ -71,13 +71,20 @@ services:
 
   # 4. Antivirus Service (ClamAV)
   clamav:
-    restart: always
-    container_name: clamav
     image: clamav/clamav-debian:1.5
+    container_name: clamav
+    restart: always
     ports:
       - "3310:3310"
     networks:
       - saas-network
+    volumes:
+      - clamav_db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # 5. Logic / Orchestration
   nodered:
@@ -179,4 +186,6 @@ volumes:
   thingsboard_data:
     driver: local
   thingsboard_logs:
+    driver: local
+  clamav_db:
     driver: local
