@@ -24,6 +24,8 @@ import { FileStatusBadge } from "@/components/FileStatusBadge";
 import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
+const POLL_INTERVAL = 5000; // Poll every 5 seconds
+
 export default function Inbox() {
   const { user, token, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -54,6 +56,12 @@ export default function Inbox() {
   useEffect(() => {
     if (user && token) {
       fetchReceivedFiles();
+
+      // Set up polling interval to refresh file list
+      const intervalId = setInterval(fetchReceivedFiles, POLL_INTERVAL);
+
+      // Cleanup interval on unmount
+      return () => clearInterval(intervalId);
     }
   }, [user, token]);
 
@@ -140,7 +148,7 @@ export default function Inbox() {
             <CardContent>
               {approvedFiles.length === 0 ? (
                 <div className="text-center py-8">
-                  <File className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
+                  <File className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                   <p className="text-muted-foreground">
                     No approved files yet.
                   </p>

@@ -52,7 +52,7 @@ export function FileList({
       <CardContent>
         {files.length === 0 ? (
           <div className="text-center py-8">
-            <File className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
+            <File className="h-12 w-12 text-gray-400 mx-auto mb-3" />
             <p className="text-muted-foreground">{emptyMessage}</p>
           </div>
         ) : (

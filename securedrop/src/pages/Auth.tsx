@@ -51,22 +51,9 @@ export default function Auth() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center shadow-lg">
-              <Shield className="h-7 w-7 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-bold text-foreground">
-              SecureDrop
-            </span>
-          </div>
-        </div>
         <Card className="shadow-xl border-border/50">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-2xl text-center">Welcome</CardTitle>
-            <CardDescription className="text-center">
-              Secure file sharing with automated threat scanning
-            </CardDescription>
+            <CardTitle className="text-2xl text-center">Welcome back</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">

@@ -53,28 +53,6 @@ async function downloadFile(bucket, objectName) {
   }
 }
 
-// Move file between buckets (quarantine -> approved/rejected)
-async function moveFile(objectName, fromBucket, toBucket) {
-  try {
-    // Copy to new bucket
-    await minioClient.copyObject(
-      toBucket,
-      objectName,
-      `/${fromBucket}/${objectName}`
-    );
-
-    // Remove from old bucket
-    await minioClient.removeObject(fromBucket, objectName);
-
-    console.log(
-      `✓ Moved file from ${fromBucket} to ${toBucket}: ${objectName}`
-    );
-  } catch (err) {
-    console.error("Error moving file:", err);
-    throw err;
-  }
-}
-
 // Get file metadata
 async function getFileMetadata(bucket, objectName) {
   try {
@@ -102,7 +80,6 @@ module.exports = {
   initBuckets,
   uploadFile,
   downloadFile,
-  moveFile,
   getFileMetadata,
   deleteFile,
 };

@@ -8,6 +8,8 @@ import { getSentFiles, deleteSentFile, FileMetadata } from "@/lib/minio";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
+const POLL_INTERVAL = 5000; // Poll every 5 seconds
+
 export default function Dashboard() {
   const { user, token, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -37,6 +39,12 @@ export default function Dashboard() {
   useEffect(() => {
     if (user && token) {
       fetchFiles();
+
+      // Set up polling interval to refresh file list
+      const intervalId = setInterval(fetchFiles, POLL_INTERVAL);
+
+      // Cleanup interval on unmount
+      return () => clearInterval(intervalId);
     }
   }, [user, token]);
 

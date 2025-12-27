@@ -230,4 +230,56 @@ router.delete("/:fileId", verifyToken, async (req, res) => {
   }
 });
 
+// POST /api/files/changeStatus - Update file status (for external virus scanner)
+router.post("/changeStatus", async (req, res) => {
+  try {
+    const { fileId, status, scanResult } = req.body;
+
+    console.log(
+      `Received status change for fileId: ${fileId}, status: ${status}`
+    );
+
+    // Validate status
+    const validStatuses = ["quarantine", "approved", "rejected"];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: "Invalid status. Must be one of: quarantine, approved, rejected",
+      });
+    }
+
+    // Get file transfer record
+    const fileTransfer = await db.getFileTransferById(fileId);
+
+    if (!fileTransfer) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    if (status === "approved") {
+      destBucket = config.minio.buckets.approved;
+    } else if (status === "rejected") {
+      destBucket = config.minio.buckets.rejected;
+    }
+
+    // Update database status
+    const updatedFileTransfer = await db.updateFileStatus(fileId, status);
+
+    res.json({
+      success: true,
+      message: "File status updated successfully",
+      fileId: fileId,
+      status: status,
+      scanResult: scanResult || null,
+      file: {
+        id: updatedFileTransfer.file_id,
+        fileName: updatedFileTransfer.file_name,
+        status: updatedFileTransfer.status,
+        updatedAt: updatedFileTransfer.updated_at,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating file status:", error);
+    res.status(500).json({ error: "Failed to update file status" });
+  }
+});
+
 module.exports = router;
