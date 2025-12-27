@@ -93,3 +93,17 @@ export const downloadFile = async (
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
+
+/**
+ * Delete a sent file
+ */
+export const deleteSentFile = async (
+  fileId: string,
+  token: string
+): Promise<void> => {
+  await axios.delete(`${API_BASE_URL}/files/${fileId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+};

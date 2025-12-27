@@ -154,6 +154,23 @@ async function updateFileStatus(fileId, status) {
   }
 }
 
+// Delete file transfer record
+async function deleteFileTransfer(fileId, senderId) {
+  const client = await pool.connect();
+  try {
+    // First verify the file belongs to the sender
+    const result = await client.query(
+      `DELETE FROM file_transfers
+       WHERE file_id = $1 AND sender_id = $2
+       RETURNING *`,
+      [fileId, senderId]
+    );
+    return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   pool,
   initDatabase,
@@ -162,4 +179,5 @@ module.exports = {
   getReceivedFiles,
   getFileTransferById,
   updateFileStatus,
+  deleteFileTransfer,
 };

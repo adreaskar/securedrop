@@ -175,4 +175,59 @@ router.get("/:fileId/download", verifyToken, async (req, res) => {
   }
 });
 
+// DELETE /api/files/:fileId - Delete a sent file
+router.delete("/:fileId", verifyToken, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+
+    // Get file transfer record
+    const fileTransfer = await db.getFileTransferById(fileId);
+
+    if (!fileTransfer) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    // Verify user is the sender
+    if (fileTransfer.sender_id !== req.user.id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    // Determine which bucket the file is in based on status
+    let bucket;
+    switch (fileTransfer.status) {
+      case "quarantine":
+      case "scanning":
+        bucket = config.minio.buckets.quarantine;
+        break;
+      case "approved":
+        bucket = config.minio.buckets.approved;
+        break;
+      case "rejected":
+        bucket = config.minio.buckets.rejected;
+        break;
+      default:
+        bucket = config.minio.buckets.quarantine;
+    }
+
+    // Delete file from MinIO
+    await minioService.deleteFile(bucket, fileTransfer.object_name);
+
+    // Delete database record
+    const deletedRecord = await db.deleteFileTransfer(fileId, req.user.id);
+
+    if (!deletedRecord) {
+      return res.status(500).json({ error: "Failed to delete file record" });
+    }
+
+    res.json({
+      success: true,
+      message: "File deleted successfully",
+      fileId: fileId,
+    });
+  } catch (error) {
+    console.error("Error deleting file:", error);
+    res.status(500).json({ error: "Failed to delete file" });
+  }
+});
+
 module.exports = router;

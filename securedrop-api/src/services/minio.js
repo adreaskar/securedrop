@@ -86,6 +86,17 @@ async function getFileMetadata(bucket, objectName) {
   }
 }
 
+// Delete file from MinIO
+async function deleteFile(bucket, objectName) {
+  try {
+    await minioClient.removeObject(bucket, objectName);
+    console.log(`✓ Deleted file from ${bucket}: ${objectName}`);
+  } catch (err) {
+    console.error("Error deleting file:", err);
+    throw err;
+  }
+}
+
 module.exports = {
   minioClient,
   initBuckets,
@@ -93,4 +104,5 @@ module.exports = {
   downloadFile,
   moveFile,
   getFileMetadata,
+  deleteFile,
 };

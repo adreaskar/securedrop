@@ -4,12 +4,14 @@ import { Header } from "@/components/Header";
 import { FileUpload } from "@/components/FileUpload";
 import { FileList } from "@/components/FileList";
 import { useAuth } from "@/hooks/useAuth";
-import { getSentFiles, FileMetadata } from "@/lib/minio";
+import { getSentFiles, deleteSentFile, FileMetadata } from "@/lib/minio";
+import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
 export default function Dashboard() {
   const { user, token, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,6 +39,38 @@ export default function Dashboard() {
       fetchFiles();
     }
   }, [user, token]);
+
+  const handleDelete = async (fileId: string) => {
+    if (!token) return;
+
+    if (
+      !confirm(
+        "Are you sure you want to delete this file? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await deleteSentFile(fileId, token);
+      toast({
+        title: "File deleted",
+        description: "The file has been successfully deleted.",
+      });
+      // Refresh the file list
+      await fetchFiles();
+    } catch (error: any) {
+      console.error("Error deleting file:", error);
+      toast({
+        title: "Delete failed",
+        description:
+          error.response?.data?.error ||
+          error.message ||
+          "Failed to delete file",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (authLoading || loading) {
     return (
@@ -67,6 +101,8 @@ export default function Dashboard() {
             title="Your Sent Files"
             description="Track the status of files you've sent"
             emptyMessage="No files sent yet. Upload your first file above."
+            onDelete={handleDelete}
+            showDeleteButton={true}
           />
         </div>
       </main>
