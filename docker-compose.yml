@@ -88,7 +88,9 @@ services:
 
   # 5. Logic / Orchestration
   nodered:
-    image: nodered/node-red:4.1.2
+    build:
+      context: ./node-red
+      dockerfile: Dockerfile
     container_name: node-red
     restart: always
     ports:
@@ -155,15 +157,15 @@ services:
     container_name: securedrop-webapp
     build:
       context: ./securedrop
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prod
     restart: always
     ports:
       - "8081:8081"
     env_file:
       - ./securedrop/.env
-    volumes:
-      - ./securedrop:/app
-      - /app/node_modules
+    # volumes:
+    #   - ./securedrop:/app
+    #   - /app/node_modules
     depends_on:
       - api
       - keycloak
