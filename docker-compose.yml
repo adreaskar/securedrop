@@ -54,9 +54,10 @@ services:
 
   # 3. Messaging / Broker
   rabbitmq:
-    image: rabbitmq:4-management
+    image: rabbitmq:3.12-management
     container_name: rabbitmq
     restart: always
+    hostname: my-rabbitmq
     environment:
       - RABBITMQ_DEFAULT_USER=user
       - RABBITMQ_DEFAULT_PASS=password
