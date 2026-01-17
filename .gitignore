@@ -6,6 +6,8 @@ dist
 dist-ssr
 *.local
 
+/node-red/prod/
+
 .env
 .env.k8s
 
