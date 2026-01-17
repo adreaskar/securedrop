@@ -209,7 +209,8 @@ export default function Index() {
               <span className="font-medium text-foreground">SecureDrop</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 SecureDrop. Secure file sharing for modern teams.
+              © {new Date().getFullYear()} SecureDrop. Secure file sharing for
+              modern teams.
             </p>
           </div>
         </div>
