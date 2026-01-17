@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clamav
+  labels:
+    app: clamav
+spec:
+  replicas: 1
+  selector: 
+    matchLabels: 
+      app: clamav
+  template:
+    metadata: 
+      labels: 
+        app: clamav 
+    spec:
+      # Fix Permissions για ClamAV (User 100)
+      initContainers:
+      - name: fix-permissions
+        image: busybox
+        command: ["sh", "-c", "chown -R 100:101 /var/lib/clamav"]
+        volumeMounts:
+        - name: db
+          mountPath: /var/lib/clamav
+        resources:
+          requests:
+            cpu: "10m"
+            memory: "10Mi"
+          limits:
+            cpu: "50m"
+            memory: "32Mi"
+
+      containers:
+      #ClamAV  
+      - name: clamav
+        image: clamav/clamav-debian:1.5
+        resources:
+          requests:
+            memory: "1200Mi"
+            cpu: "100m"
+          limits:
+            memory: "2048Mi"
+            cpu: "1000m" 
+        ports:
+        - containerPort: 3310
+        volumeMounts:
+        - name: db
+          mountPath: /var/lib/clamav
+        livenessProbe:
+          exec:
+            command: ["/bin/sh", "-c", "clamdcheck.sh"]
+          initialDelaySeconds: 120
+          periodSeconds: 30
+
+      #Sidecar για Monitoring
+      - name: clamav-exporter
+        image: rekzi/clamav-prometheus-exporter:1.0.0
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+        ports:
+        - containerPort: 9810
+          name: metrics
+        env:
+        - name: CLAMAV_ADDRESS
+          value: "127.0.0.1"
+
+      volumes:
+      - name: db
+        persistentVolumeClaim:
+          claimName: clamav-db

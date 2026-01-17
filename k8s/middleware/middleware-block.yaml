@@ -1,0 +1,10 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: block-external
+  namespace: default
+spec:
+  ipWhiteList:
+    sourceRange:
+      - "127.0.0.1/32" # Μόνο το localhost περνάει (άρα κανείς απ' έξω)
+      - "10.0.0.0/8" # Εσωτερικό δίκτυο (προσαρμόστε αν χρειάζεται)

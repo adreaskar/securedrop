@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init-job
+spec:
+  ttlSecondsAfterFinished: 600 # (Προαιρετικό) Σβήνει το Pod 10 λεπτά αφού τελειώσει
+  template:
+    spec:
+      containers:
+      - name: minio-mc
+        image: minio/mc:latest
+        env:
+          - name: MINIO_ROOT_USER
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: MINIO_ROOT_USER
+          - name: MINIO_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: MINIO_ROOT_PASSWORD
+          - name: TARGET_BUCKET
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: TARGET_BUCKET
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Waiting for MinIO..."
+            until mc alias set myminio http://minio-service:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+              echo "MinIO not ready yet... sleeping"
+              sleep 2
+            done
+
+            echo "MinIO is up. Creating Bucket..."
+            mc mb myminio/$TARGET_BUCKET --ignore-existing
+
+            echo "Enabling events on bucket..."
+           
+            mc event add myminio/$TARGET_BUCKET arn:minio:sqs::rabbitmq:amqp --event put --ignore-existing
+
+            echo "Configuration done. Job completed."
+            
+      restartPolicy: OnFailure

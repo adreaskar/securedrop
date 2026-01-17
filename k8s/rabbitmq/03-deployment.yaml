@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: rabbitmq } }
+  template:
+    metadata: { labels: { app: rabbitmq } }
+    spec:
+      #Init Container 
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          command: ["sh", "-c", "chown -R 999:999 /var/lib/rabbitmq"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.12-management
+          # command: ["/bin/sh", "-c", "sleep 3600"] # 
+          resources:
+            requests:
+              memory: "200Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: RABBITMQ_NODENAME
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: RABBITMQ_NODENAME
+            
+          ports:
+            - containerPort: 5672 
+            - containerPort: 15672 
+          
+          # --- Healthcheck  ---
+          livenessProbe:
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 30
+            periodSeconds: 15
+
+          volumeMounts:
+            # ---  (Data) ---
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            
+           # Mount Definitions
+            - name: topology-vol
+              mountPath: /etc/rabbitmq/definitions.json
+              subPath: definitions.json
+
+            # Mount Config to conf.d (Merges with system config)
+            - name: topology-vol
+              mountPath: /etc/rabbitmq/conf.d/10-custom.conf
+              subPath: 10-custom.conf
+
+      volumes:
+        # --- (PVC) ---
+        - name: data
+          persistentVolumeClaim:
+            claimName: rabbitmq-data
+        # Volume for Topology Config        
+        - name: topology-vol
+          configMap:
+            name: rabbitmq-topology
+            defaultMode: 0666

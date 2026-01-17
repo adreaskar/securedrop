@@ -1,0 +1,344 @@
+services:
+  # 1. Identity and Access Management
+  keycloak:
+    restart: always
+    container_name: keycloak
+    image: keycloak/keycloak:24.0
+    command: start-dev --import-realm
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      KC_HOSTNAME_PORT: ${KC_HOSTNAME_PORT}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      KC_DB: ${KC_DB}
+      KC_DB_SCHEMA: ${KC_DB_SCHEMA}
+      KC_DB_URL_HOST: ${KC_DB_URL_HOST}
+      KC_DB_URL_DATABASE: ${KC_DB_URL_DATABASE}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_DB_USERNAME: ${KC_DB_USERNAME}
+
+      KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_HOSTNAME_STRICT: ${KC_HOSTNAME_STRICT}
+      KC_HTTP_ENABLED: ${KC_HTTP_ENABLED}
+      KC_HOSTNAME_STRICT_HTTPS: ${KC_HOSTNAME_STRICT_HTTPS}
+      KC_HEALTH_ENABLED: ${KC_HEALTH_ENABLED}
+      KC_METRICS_ENABLED: ${KC_METRICS_ENABLED}
+      KC_LOG_LEVEL: ${KC_LOG_LEVEL}
+      KC_PROXY_HEADERS: ${KC_PROXY_HEADERS}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '\"status\": \"UP\"' && exit 0 || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    networks:
+      - saas-network
+
+  db:
+    container_name: keycloak-db
+    image: postgres:16
+    expose:
+      - 5432
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${KC_DB_URL_DATABASE}
+      POSTGRES_USER: ${KC_DB_USERNAME}
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${KC_DB_USERNAME} -d ${KC_DB_URL_DATABASE}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data/
+    networks:
+      - saas-network
+
+  # 2. Object Storage
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_SERVER_URL: ${MINIO_SERVER_URL}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL}
+      # RabbitMQ Notification Configuration
+      MINIO_NOTIFY_AMQP_ENABLE_rabbitmq: ${MINIO_NOTIFY_AMQP_ENABLE_rabbitmq}
+      MINIO_NOTIFY_AMQP_URL_rabbitmq: ${MINIO_NOTIFY_AMQP_URL_rabbitmq}
+      MINIO_NOTIFY_AMQP_EXCHANGE_rabbitmq: ${MINIO_NOTIFY_AMQP_EXCHANGE_rabbitmq}
+      MINIO_NOTIFY_AMQP_EXCHANGE_TYPE_rabbitmq: ${MINIO_NOTIFY_AMQP_EXCHANGE_TYPE_rabbitmq}
+      MINIO_NOTIFY_AMQP_ROUTING_KEY_rabbitmq: ${MINIO_NOTIFY_AMQP_ROUTING_KEY_rabbitmq}
+      MINIO_NOTIFY_AMQP_MANDATORY_rabbitmq: ${MINIO_NOTIFY_AMQP_MANDATORY_rabbitmq}
+      MINIO_NOTIFY_AMQP_DURABLE_rabbitmq: ${MINIO_NOTIFY_AMQP_DURABLE_rabbitmq}
+      MINIO_NOTIFY_AMQP_COMMENT_rabbitmq: ${MINIO_NOTIFY_AMQP_COMMENT_rabbitmq}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # MinIO API port
+      - "9001:9001" # MinIO Console/Browser UI port
+    volumes:
+      - minio_data:/data
+    networks:
+      - saas-network
+
+  minio-init:
+    image: alpine:latest
+    container_name: minio-init
+    depends_on:
+      - minio
+    networks:
+      - saas-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        # 1. Install dependencies
+        apk add --no-cache curl
+
+        # 2. Detect Architecture (Simple If/Else)
+        if [ "$$(uname -m)" = "aarch64" ]; then
+          ARCH=arm64
+        else
+          ARCH=amd64
+        fi
+        echo "Detected Arch: $$ARCH"
+
+        # 3. Download MinIO Client
+        curl -f -o /usr/bin/mc https://dl.min.io/client/mc/release/linux-$$ARCH/mc
+        chmod +x /usr/bin/mc
+
+        # 4. Wait for MinIO (Using Env Vars)
+        echo 'Waiting for MinIO...'
+        until /usr/bin/mc alias set myminio http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          sleep 2
+        done
+
+        # 5. Configure Bucket & Events
+        /usr/bin/mc mb myminio/quarantine --ignore-existing
+        /usr/bin/mc event add myminio/quarantine arn:minio:sqs::rabbitmq:amqp --event put --ignore-existing
+
+        # 6. Self-Destruct
+        echo 'Configuration done. Self-destructing...'
+        curl --unix-socket /var/run/docker.sock -X DELETE "http://localhost/containers/minio-init?force=true"
+
+  # 3. Messaging / Broker
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq
+    restart: always
+    hostname: my-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    ports:
+      - "5672:5672" # Standard AMQP port
+      - "15672:15672" # Management UI port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    networks:
+      - saas-network
+
+  # 4. Antivirus Service (ClamAV)
+  clamav:
+    image: clamav/clamav-debian:1.5
+    container_name: clamav
+    restart: always
+    ports:
+      - "3310:3310"
+    networks:
+      - saas-network
+    volumes:
+      - clamav_db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 5. Logic / Orchestration
+  nodered:
+    build:
+      context: ./node-red
+      dockerfile: Dockerfile.dev
+    container_name: node-red
+    restart: always
+    ports:
+      - "1880:1880"
+    environment:
+      TZ: Europe/Athens
+      NODE_RED_CREDENTIAL_SECRET: ${NODE_RED_CREDENTIAL_SECRET}
+    volumes:
+      - nodered_data:/data
+    depends_on:
+      - rabbitmq
+      - minio
+    networks:
+      - saas-network
+
+  # 6. Dashboard / IoT Platform
+  thingsboard:
+    restart: always
+    container_name: thingsboard
+    image: thingsboard/tb-postgres:3.8.1
+    ports:
+      - "8070:9090"
+      - "1883:1883"
+      - "7070:7070"
+      - "5683-5688:5683-5688/udp"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - thingsboard_data:/data
+      - thingsboard_logs:/var/log/thingsboard
+    networks:
+      - saas-network
+
+  thingsboard-init:
+    image: python:3.12-slim
+    container_name: thingsboard-init
+    depends_on:
+      - thingsboard
+    volumes:
+      - ./thingsboard:/config
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /config
+    command: >
+      sh -c "
+      apt-get update && apt-get install -y curl &&
+      pip install requests &&
+      python init_thingsboard.py &&
+      echo 'Self-destructing...' &&
+      curl --unix-socket /var/run/docker.sock -X DELETE 'http://localhost/containers/thingsboard-init?force=true'
+      "
+    networks:
+      - saas-network
+
+  # 7. Backend API
+  api:
+    container_name: securedrop-api
+    build:
+      context: ./securedrop-api
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      KEYCLOAK_URL: ${KEYCLOAK_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSL: ${DB_SSL}
+      PORT: ${PORT}
+      NODE_ENV: ${NODE_ENV}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE}
+    depends_on:
+      - api-db
+      - keycloak
+      - minio
+    networks:
+      - saas-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  api-db:
+    container_name: api-db
+    image: postgres:16
+    restart: always
+    expose:
+      - 5432
+    ports:
+      - "5433:5432" # Different host port to avoid conflict with keycloak-db
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - api-db-data:/var/lib/postgresql/data/
+    networks:
+      - saas-network
+
+  # 8. Web App (Frontend)
+  webapp:
+    container_name: securedrop-webapp
+    build:
+      context: ./securedrop
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
+        VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    restart: always
+    ports:
+      - "8081:8081"
+    depends_on:
+      - api
+      - keycloak
+    networks:
+      - saas-network
+
+networks:
+  saas-network:
+    driver: bridge
+
+volumes:
+  keycloak-db-data:
+    driver: local
+  minio_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  nodered_data:
+    driver: local
+  thingsboard_data:
+    driver: local
+  thingsboard_logs:
+    driver: local
+  clamav_db:
+    driver: local
+  api-db-data:
+    driver: local

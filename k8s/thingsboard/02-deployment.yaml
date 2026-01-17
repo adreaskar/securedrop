@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thingsboard
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: thingsboard } }
+  template:
+    metadata: { labels: { app: thingsboard } }
+    spec:
+      containers:
+        - name: thingsboard
+          image: thingsboard/tb-postgres:3.8.1
+          resources:
+            requests:
+              memory: "1200Mi"
+              cpu: "250m"
+            limits:
+              memory: "2500Mi"
+              cpu: "1500m"
+          env:
+            - name: TB_QUEUE_TYPE
+              value: "in-memory"
+            #- name: TB_QUEUE_RABBIT_MQ_USERNAME
+            #  valueFrom:
+            #    secretKeyRef:
+            #      name: securedrop-secrets
+            #      key: TB_QUEUE_RABBIT_MQ_USERNAME
+            #- name: TB_QUEUE_RABBIT_MQ_PASSWORD
+            #  valueFrom:
+            #    secretKeyRef:
+            #      name: securedrop-secrets
+            #      key: TB_QUEUE_RABBIT_MQ_PASSWORD
+            #- name: TB_QUEUE_TYPE
+            #  valueFrom:
+            #    secretKeyRef:
+            #      name: securedrop-secrets
+            #      key: TB_QUEUE_TYPE
+            #- name: TB_QUEUE_RABBIT_MQ_HOST
+            #  valueFrom:
+            #    secretKeyRef:
+            #      name: securedrop-secrets
+            #      key: TB_QUEUE_RABBIT_MQ_HOST
+            #- name: TB_QUEUE_RABBIT_MQ_PORT
+            #  valueFrom:
+            #    secretKeyRef:
+            #      name: securedrop-secrets
+            #      key: TB_QUEUE_RABBIT_MQ_PORT
+          ports:
+            - containerPort: 9090
+            - containerPort: 1883
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: logs
+              mountPath: /var/log/thingsboard
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: thingsboard-data
+        - name: logs
+          persistentVolumeClaim:
+            claimName: thingsboard-logs

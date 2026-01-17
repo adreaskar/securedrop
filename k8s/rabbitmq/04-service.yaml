@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  ## added for rabbitmq-monitor.yaml
+  labels:
+    app: rabbitmq
+  ## end added
+spec:
+  selector: { app: rabbitmq }
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672
+    ## added for rabbitmq-monitor.yaml
+    - name: metrics
+      port: 15692
+      protocol: TCP
+      targetPort: 15692
+    ## end added

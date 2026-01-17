@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: keycloak/keycloak:24.0
+          args: ["start-dev"]
+          resources:
+            requests:
+              memory: "1.5Gi"
+              cpu: "250m"
+            limits:
+              memory: "2.5Gi"
+              cpu: "1000m"
+          env:
+            - name: KEYCLOAK_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KEYCLOAK_ADMIN
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KEYCLOAK_ADMIN_PASSWORD
+            - name: KC_HOSTNAME
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_HOSTNAME
+            - name: KC_HOSTNAME_STRICT
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_HOSTNAME_STRICT
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_HOSTNAME_STRICT_HTTPS
+            - name: KC_HTTP_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_HTTP_ENABLED
+            - name: KC_HEALTH_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_HEALTH_ENABLED
+            - name: KC_METRICS_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_METRICS_ENABLED
+            - name: KC_LOG_LEVEL
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_LOG_LEVEL
+            - name: KC_PROXY_HEADERS
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_PROXY_HEADERS
+            - name: KC_DB
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_DB
+            - name: KC_DB_SCHEMA
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_DB_SCHEMA
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_DB_USERNAME
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_DB_PASSWORD
+            - name: KC_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: KC_DB_URL
+            - name: JAVA_OPTS_APPEND
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: JAVA_OPTS_APPEND

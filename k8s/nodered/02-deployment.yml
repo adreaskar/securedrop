@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodered
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: nodered } }
+  template:
+    metadata: { labels: { app: nodered } }
+    spec:
+      # Fix Permissions (User 1000: node-red)
+      #initContainers:
+      #  - name: fix-permissions
+      #    image: busybox
+      #    command: ["sh", "-c", "chown -R 1000:1000 /data"]
+      #    volumeMounts:
+      #      - name: data
+      #        mountPath: /data
+
+      containers:
+        - name: nodered
+          image: adreaskar/securedrop-nodered:2.0
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "384Mi"
+              cpu: "500m"
+          ports:
+            - containerPort: 1880
+          env:
+            - name: TZ
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: TZ
+            - name: NODE_RED_CREDENTIAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: securedrop-secrets
+                  key: NODE_RED_CREDENTIAL_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /data
+
+          # Healthcheck (απλό TCP check)
+          livenessProbe:
+            tcpSocket:
+              port: 1880
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nodered-data

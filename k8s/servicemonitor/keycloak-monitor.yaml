@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: keycloak-monitor
+  namespace: observability # Εδώ ζει ο Prometheus σου
+  labels:
+    release: kube-prom-stack # Η ετικέτα για να το "δει" ο Prometheus Operator
+spec:
+  selector:
+    matchLabels:
+      app: keycloak # Πρέπει να ταιριάζει με το Label του Service σου
+  namespaceSelector:
+    matchNames:
+      - default # Το namespace που τρέχει το Keycloak
+  endpoints:
+    - port: http # Το όνομα της πόρτας στο Service (8080)
+      path: /metrics # Η διαδρομή των metrics
+      interval: 30s # Κάθε πότε να τραβάει δεδομένα

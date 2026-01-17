@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak-metrics-protection
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.middlewares: default-block-external@kubernetescrd
+spec:
+  rules:
+    - host: keycloak.securedrop.gr
+      http:
+        paths:
+          - path: /metrics
+            pathType: Exact # <--- Αυτό κερδίζει το γενικό Prefix
+            backend:
+              service:
+                name: keycloak-service
+                port:
+                  number: 8080

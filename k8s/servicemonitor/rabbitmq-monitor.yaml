@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq-monitor
+  namespace: observability
+  labels:
+    release: kube-prom-stack # CRITICAL: This label links it to your Prometheus instance
+spec:
+  selector:
+    matchLabels:
+      app: rabbitmq # <--- MUST MATCH your RabbitMQ Service labels
+  namespaceSelector:
+    matchNames:
+      - default # <--- The namespace where RabbitMQ runs
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
