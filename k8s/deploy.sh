@@ -60,7 +60,7 @@ ensure_addons() {
   fi
 }
 
-# --- Main Execution ---
+
 log "Starting deployment (DRY_RUN=$DRY_RUN)"
 ensure_addons
 
