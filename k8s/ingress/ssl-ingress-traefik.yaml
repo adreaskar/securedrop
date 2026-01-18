@@ -21,7 +21,7 @@ spec:
         - rabbitmq.securedrop.gr
         - nodered.securedrop.gr
         - thingsboard.securedrop.gr
-      secretName: securedrop-tls-cert # Certificate will be stored here
+      secretName: securedrop-tls-cert
   rules:
     # --- 1. Node-RED ---
     - host: nodered.securedrop.gr
