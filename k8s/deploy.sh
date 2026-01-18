@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
 ISSUER_FILE="./cluster-issuer-traefik.yaml"
 DRY_RUN="${DRY_RUN:-false}"
-KUBECTL="microk8s kubectl"
 
-log() { echo "[+] $*"; }
-cmd() { echo "    $ $*"; [[ "$DRY_RUN" == "true" ]] || eval "$@"; }
+
+MICROK8S_CMD="microk8s"
+KUBECTL_CMD="$MICROK8S_CMD kubectl"
+REQUIRED_ADDONS=("traefik" "cert-manager" "observability" "registry" "storage" "hostpath-storage" "dns" "community")
+
+log() { echo -e "\033[1;34m[+]\033[0m $*"; }
+
+cmd() {
+  echo "    $ $*"
+  if [[ "$DRY_RUN" != "true" ]]; then
+    eval "$@"
+  fi
+}
 
 apply_yaml() {
   local file="$1"
-  [[ -f "$file" ]] && cmd "$KUBECTL apply -f \"$file\""
+  if [[ -f "$file" ]]; then
+    log "Applying file: $file"
+    cmd "$KUBECTL_CMD apply -f \"$file\""
+  else
+    echo "Warning: File $file not found, skipping."
+  fi
 }
 
 apply_folder() {
@@ -23,24 +37,51 @@ apply_folder() {
   done
 }
 
+
+ensure_addons() {
+  local missing_addons=()
+  log "Checking MicroK8s addons status..."
+  local current_status
+  current_status=$($MICROK8S_CMD status --format short 2>/dev/null || echo "")
+
+  for addon in "${REQUIRED_ADDONS[@]}"; do
+    if echo "$current_status" | grep -qw "$addon"; then
+      echo "    - Addon '$addon' is already enabled."
+    else
+      missing_addons+=("$addon")
+    fi
+  done
+
+  if [ ${#missing_addons[@]} -gt 0 ]; then
+    log "Enabling missing addons: ${missing_addons[*]}"
+    cmd "$MICROK8S_CMD enable ${missing_addons[*]}"
+  else
+    log "All required addons are already enabled."
+  fi
+}
+
+# --- Main Execution ---
 log "Starting deployment (DRY_RUN=$DRY_RUN)"
+ensure_addons
 
-# enable addons if not enabled
-microk8s enable traefik cert-manager observability registry storage hostpath-storage dns community
-
-# 1. apply secrets
 if [[ -f "./kustomization.yml" || -f "./kustomization.yaml" ]]; then
   log "Applying root kustomization: ."
-  cmd "$KUBECTL apply -k ."
+  cmd "$KUBECTL_CMD apply -k ."
 fi
 
-# 2. Apply issuer first
 apply_yaml "$ISSUER_FILE"
 
-# 3. Apply all component folders in order
-for folder in middleware keycloak minio rabbitmq clamav nodered thingsboard api webapp servicemonitor ingress; do
-  apply_folder "./$folder"
-  sleep 5
+
+FOLDERS=(middleware keycloak minio rabbitmq clamav nodered thingsboard api webapp servicemonitor ingress)
+
+for folder in "${FOLDERS[@]}"; do
+  if [[ -d "./$folder" ]]; then
+    apply_folder "./$folder"
+    if [[ "$DRY_RUN" != "true" ]]; then
+        log "Waiting 5 seconds..."
+        sleep 5
+    fi
+  fi
 done
 
 log "Deployment completed."
