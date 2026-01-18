@@ -12,7 +12,7 @@ spec:
       http:
         paths:
           - path: /metrics
-            pathType: Exact # <--- Αυτό κερδίζει το γενικό Prefix
+            pathType: Exact
             backend:
               service:
                 name: keycloak-service
