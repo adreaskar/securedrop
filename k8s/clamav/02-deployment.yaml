@@ -22,9 +22,9 @@ spec:
         volumeMounts:
         - name: db
           mountPath: /var/lib/clamav
-        - name: yara-rules
-          configMap:
-            name: clamav-yara-rules
+       - name: yara-rules
+          mountPath: /var/lib/clamav/custom.yara
+          subPath: custom.yara
         resources:
           requests:
             cpu: "10m"
@@ -76,3 +76,6 @@ spec:
       - name: db
         persistentVolumeClaim:
           claimName: clamav-db
+      - name: yara-rules
+        configMap:
+          name: clamav-yara-rules
