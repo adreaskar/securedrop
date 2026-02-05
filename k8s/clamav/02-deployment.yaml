@@ -49,6 +49,11 @@ spec:
               secretKeyRef:
                 name: securedrop-secrets
                 key: CLAMD_CONF_DetectPUA
+          - name: CLAMD_CONF_IncludePUA
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_IncludePUA
           - name: CLAMD_CONF_HeuristicAlerts
             valueFrom:
               secretKeyRef:
