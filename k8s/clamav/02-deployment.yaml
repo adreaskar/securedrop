@@ -6,24 +6,31 @@ metadata:
     app: clamav
 spec:
   replicas: 1
-  selector: 
-    matchLabels: 
+  selector:
+    matchLabels:
       app: clamav
   template:
-    metadata: 
-      labels: 
-        app: clamav 
+    metadata:
+      labels:
+        app: clamav
     spec:
       # Fix Permissions για ClamAV (User 100)
       initContainers:
       - name: fix-permissions
         image: busybox
-        command: ["sh", "-c", "chown -R 100:101 /var/lib/clamav"]
+        #old command: ["sh", "-c", "chown -R 100:101 /var/lib/clamav"]
+        command:
+        - sh
+        - -c
+        - |
+          chown -R 100:101 /var/lib/clamav
+          cp /tmp/yara-readonly/custom.yara /var/lib/clamav/custom.yara
+          chown 100:101 /var/lib/clamav/custom.yara
         volumeMounts:
         - name: db
           mountPath: /var/lib/clamav
         - name: yara-rules
-          mountPath: /tmp/rules
+          mountPath: /tmp/yara-readonly
         resources:
           requests:
             cpu: "10m"
@@ -33,16 +40,19 @@ spec:
             memory: "32Mi"
 
       containers:
-      #ClamAV  
+      #ClamAV
       - name: clamav
         image: clamav/clamav-debian:1.5
+        envFrom:
+          - secretRef:
+              name: clamavsecrets
         resources:
           requests:
             memory: "1200Mi"
             cpu: "100m"
           limits:
             memory: "2048Mi"
-            cpu: "1000m" 
+            cpu: "1000m"
         ports:
         - containerPort: 3310
         volumeMounts:
@@ -78,3 +88,4 @@ spec:
       - name: yara-rules
         configMap:
           name: clamav-yara-rules
+          defaultMode: 0644
