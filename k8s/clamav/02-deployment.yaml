@@ -43,9 +43,72 @@ spec:
       #ClamAV
       - name: clamav
         image: clamav/clamav-debian:1.5
-        envFrom:
-          - secretRef:
-              name: clamavsecrets
+        env:
+          - name: CLAMD_CONF_DetectPUA
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_DetectPUA
+          - name: CLAMD_CONF_HeuristicAlerts
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_HeuristicAlerts
+          - name: CLAMD_CONF_AlertBrokenExecutables
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_AlertBrokenExecutables
+          - name: CLAMD_CONF_AlertBrokenMedia
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_AlertBrokenMedia
+          - name: CLAMD_CONF_AlertPhishingSSLMismatch
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_AlertPhishingSSLMismatch
+          - name: CLAMD_CONF_AlertPhishingCloak
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_AlertPhishingCloak
+          - name: CLAMD_CONF_AlertEncrypted
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_AlertEncrypted
+          - name: CLAMD_CONF_AlertEncryptedArchive
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_AlertEncryptedArchive
+          - name: CLAMD_CONF_AlertEncryptedDoc
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_AlertEncryptedDoc
+          - name: CLAMD_CONF_StreamMaxLength
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_StreamMaxLength
+          - name: CLAMD_CONF_MaxFileSize
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_MaxFileSize
+          - name: CLAMD_CONF_MaxScanSize
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_MaxScanSize
+          - name: CLAMD_CONF_MaxDirectoryRecursion
+            valueFrom:
+              secretKeyRef:
+                name: securedrop-secrets
+                key: CLAMD_CONF_MaxDirectoryRecursion
         resources:
           requests:
             memory: "1200Mi"
