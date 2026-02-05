@@ -22,6 +22,8 @@ spec:
         volumeMounts:
         - name: db
           mountPath: /var/lib/clamav
+        - name: yara-rules
+          mountPath: /tmp/rules
         resources:
           requests:
             cpu: "10m"
@@ -46,9 +48,6 @@ spec:
         volumeMounts:
         - name: db
           mountPath: /var/lib/clamav
-        - name: yara-rules
-          mountPath: /var/lib/clamav/custom.yara
-          subPath: custom.yara
         livenessProbe:
           exec:
             command: ["/bin/sh", "-c", "clamdcheck.sh"]
