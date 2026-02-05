@@ -13,6 +13,6 @@ spec:
     matchNames:
       - default
   endpoints:
-    - port: metrics # Χτυπάει στην πόρτα που ονομάσαμε 'metrics' (9810)
+    - port: metrics 
       interval: 30s
       path: /metrics
