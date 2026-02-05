@@ -123,6 +123,6 @@ docker-compose down -v --rmi all
 ## 🔒 Security Notes
 
 - JWT tokens are validated on every API request
-- Rate limiting: 100 requests per 15 minutes
+- Rate limiting: 100 requests per 5 minutes
 - Files must be approved before download
 - User can only download files sent to their email
