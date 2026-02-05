@@ -10,7 +10,7 @@ data:
             priority = 1
         strings:
             $s1 = "EICAR-STANDARD-ANTIVIRUS-TEST-FILE" ascii wide
-            $s2 = "P^^)7CC)7" 
+            $s2 = "P^^)7CC)7"
         condition:
             $s1 or $s2
     }
