@@ -22,7 +22,7 @@ spec:
         volumeMounts:
         - name: db
           mountPath: /var/lib/clamav
-       - name: yara-rules
+        - name: yara-rules
           mountPath: /var/lib/clamav/custom.yara
           subPath: custom.yara
         resources:
