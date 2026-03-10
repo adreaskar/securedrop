@@ -1,6 +1,4 @@
 ## this should be enabled with addon -> microk8s enable observability --kube-prometheus-stack-values=./observability-values.yaml
-## will update deploy.sh to automate it
-
 grafana:
   persistence:
     enabled: true
