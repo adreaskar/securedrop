@@ -8,12 +8,12 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: minio # <--- Ταιριάζει με το Label που βάλαμε στο Βήμα 2
+      app: minio 
   namespaceSelector:
     matchNames:
-      - default # <--- Το namespace που τρέχει το MinIO
+      - default 
   endpoints:
-    - port: api # <--- Στοχεύουμε την πόρτα 9000 (που ονομάσαμε 'api')
+    - port: api 
       interval: 30s
       path: /minio/v2/metrics/cluster
       scheme: http
