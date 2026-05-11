@@ -1,0 +1,86 @@
+---
+- name: Install Jenkins and HashiCorp Vault on VM2
+  hosts: vm2
+  become: yes
+
+  tasks:
+    #(Αποφυγή APT Lock)
+    - name: Wait for any running unattended upgrades to finish
+      shell: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do 
+          sleep 10; 
+        done;
+      changed_when: false
+
+    #ΕΓΚΑΤΑΣΤΑΣΗ ΑΠΑΡΑΙΤΗΤΩΝ ΠΑΚΕΤΩΝ & JAVA 21
+    - name: Install prerequisite packages and Java 21
+      apt:
+        name:
+          - wget
+          - curl
+          - gnupg
+          - apt-transport-https
+          - openjdk-21-jre
+        state: present
+        update_cache: yes
+
+    #ΕΓΚΑΤΑΣΤΑΣΗ JENKINS
+    - name: Add Jenkins GPG key
+      get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /usr/share/keyrings/jenkins-keyring.asc
+        force: yes
+
+    - name: Add Jenkins repository
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        state: present
+        filename: jenkins
+        update_cache: yes
+
+    - name: Install Jenkins
+      apt:
+        name: jenkins
+        state: present
+
+    - name: Ensure Jenkins is started and enabled on boot
+      systemd:
+        name: jenkins
+        state: started
+        enabled: yes
+
+    #ΕΓΚΑΤΑΣΤΑΣΗ HASHICORP VAULT
+    - name: Add HashiCorp GPG key
+      get_url:
+        url: https://apt.releases.hashicorp.com/gpg
+        dest: /usr/share/keyrings/hashicorp-archive-keyring.asc
+
+    - name: Add HashiCorp repository
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.asc] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        state: present
+        filename: hashicorp
+        update_cache: yes
+
+    - name: Install HashiCorp Vault
+      apt:
+        name: vault
+        state: present
+
+    - name: Ensure Vault is enabled on boot
+      systemd:
+        name: vault
+        enabled: yes
+
+    #ΡΥΘΜΙΣΗ FIREWALL (UFW)
+    - name: Allow Jenkins traffic on port 8080
+      ufw:
+        rule: allow
+        port: '8080'
+        proto: tcp
+
+    - name: Allow Vault traffic on port 8200
+      ufw:
+        rule: allow
+        port: '8200'
+        proto: tcp

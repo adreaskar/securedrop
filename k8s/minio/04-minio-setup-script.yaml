@@ -3,44 +3,55 @@ kind: Job
 metadata:
   name: minio-init-job
 spec:
-  ttlSecondsAfterFinished: 600 # (Προαιρετικό) Σβήνει το Pod 10 λεπτά αφού τελειώσει
+  ttlSecondsAfterFinished: 600
   template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "minio-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/minio"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/minio" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
     spec:
+      serviceAccountName: minio-sa
       containers:
-      - name: minio-mc
-        image: minio/mc:latest
-        env:
-          - name: MINIO_ROOT_USER
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: MINIO_ROOT_USER
-          - name: MINIO_ROOT_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: MINIO_ROOT_PASSWORD
-          - name: TARGET_BUCKET
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: TARGET_BUCKET
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            echo "Waiting for MinIO..."
-            until mc alias set myminio http://minio-service:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
-              echo "MinIO not ready yet... sleeping"
-              sleep 2
-            done
+        - name: minio-mc
+          image: minio/mc:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # 1. Έλεγχος αν υπάρχει το αρχείο
+              if [ ! -f /vault/secrets/config.env ]; then
+                echo "ERROR: Config file not found!"
+                exit 1
+              fi
 
-            echo "MinIO is up. Creating Bucket..."
-            mc mb myminio/$TARGET_BUCKET --ignore-existing
+              # 2. Φόρτωση μυστικών
+              source /vault/secrets/config.env
 
-            echo "Enabling events on bucket..."
-           
-            mc event add myminio/$TARGET_BUCKET arn:minio:sqs::rabbitmq:amqp --event put --ignore-existing
+              # 3. Ρύθμιση Alias
+              echo "Setting up alias for MinIO..."
+              until mc alias set myminio http://minio-service:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                echo "Waiting for MinIO service..."
+                sleep 5
+              done
 
-            echo "Configuration done. Job completed."
-            
+              # 4. Δημιουργία Bucket
+              echo "Ensuring bucket exists: $TARGET_BUCKET"
+              mc mb myminio/"$TARGET_BUCKET" --ignore-existing
+
+              # 5. Προσθήκη Event με έλεγχο
+              echo "Attempting to add event notification..."
+              if mc event add myminio/"$TARGET_BUCKET" arn:minio:sqs::rabbitmq:amqp --event put --ignore-existing; then
+                echo "SUCCESS: Event added."
+              else
+                echo "WARNING: Could not add event. Is MinIO deployment updated with Vault vars?"
+                # Δεν κάνουμε exit 1 εδώ για να μην μπει σε CrashLoop αν το μόνο πρόβλημα είναι το event
+              fi
+
+              echo "Job finished. Sleeping to keep pod alive for debugging..."
       restartPolicy: OnFailure

@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log*
+.env
+.env.*
+scanner.tar
+.git
+.gitignore
+.vscode
+.idea
+coverage
+dist
+build

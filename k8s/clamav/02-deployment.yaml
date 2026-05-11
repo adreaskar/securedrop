@@ -13,147 +13,89 @@ spec:
     metadata:
       labels:
         app: clamav
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "clamav-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/clamav"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/clamav" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
     spec:
-      # Fix Permissions για ClamAV (User 100)
+      serviceAccountName: clamav-sa
+
       initContainers:
-      - name: fix-permissions
-        image: busybox
-        #old command: ["sh", "-c", "chown -R 100:101 /var/lib/clamav"]
-        command:
-        - sh
-        - -c
-        - |
-          chown -R 100:101 /var/lib/clamav
-          cp /tmp/yara-readonly/custom.yara /var/lib/clamav/custom.yara
-          chown 100:101 /var/lib/clamav/custom.yara
-        volumeMounts:
-        - name: db
-          mountPath: /var/lib/clamav
-        - name: yara-rules
-          mountPath: /tmp/yara-readonly
-        resources:
-          requests:
-            cpu: "10m"
-            memory: "10Mi"
-          limits:
-            cpu: "50m"
-            memory: "32Mi"
+        - name: fix-permissions
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 100:101 /var/lib/clamav
+              cp /tmp/yara-readonly/custom.yara /var/lib/clamav/custom.yara
+              chown 100:101 /var/lib/clamav/custom.yara
+          volumeMounts:
+            - name: db
+              mountPath: /var/lib/clamav
+            - name: yara-rules
+              mountPath: /tmp/yara-readonly
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "10Mi"
+            limits:
+              cpu: "50m"
+              memory: "32Mi"
 
       containers:
-      #ClamAV
-      - name: clamav
-        image: clamav/clamav-debian:1.5
-        env:
-          - name: CLAMD_CONF_DetectPUA
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_DetectPUA
-          - name: CLAMD_CONF_IncludePUA
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_IncludePUA
-          - name: CLAMD_CONF_HeuristicAlerts
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_HeuristicAlerts
-          - name: CLAMD_CONF_AlertBrokenExecutables
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_AlertBrokenExecutables
-          - name: CLAMD_CONF_AlertBrokenMedia
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_AlertBrokenMedia
-          - name: CLAMD_CONF_AlertPhishingSSLMismatch
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_AlertPhishingSSLMismatch
-          - name: CLAMD_CONF_AlertPhishingCloak
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_AlertPhishingCloak
-          - name: CLAMD_CONF_AlertEncrypted
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_AlertEncrypted
-          - name: CLAMD_CONF_AlertEncryptedArchive
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_AlertEncryptedArchive
-          - name: CLAMD_CONF_AlertEncryptedDoc
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_AlertEncryptedDoc
-          - name: CLAMD_CONF_StreamMaxLength
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_StreamMaxLength
-          - name: CLAMD_CONF_MaxFileSize
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_MaxFileSize
-          - name: CLAMD_CONF_MaxScanSize
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_MaxScanSize
-          - name: CLAMD_CONF_MaxDirectoryRecursion
-            valueFrom:
-              secretKeyRef:
-                name: securedrop-secrets
-                key: CLAMD_CONF_MaxDirectoryRecursion
-        resources:
-          requests:
-            memory: "1200Mi"
-            cpu: "100m"
-          limits:
-            memory: "2048Mi"
-            cpu: "1000m"
-        ports:
-        - containerPort: 3310
-        volumeMounts:
-        - name: db
-          mountPath: /var/lib/clamav
-        livenessProbe:
-          exec:
-            command: ["/bin/sh", "-c", "clamdcheck.sh"]
-          initialDelaySeconds: 120
-          periodSeconds: 30
+        # ClamAV
+        - name: clamav
+          image: clamav/clamav-debian:1.5
+          command: ["/bin/bash", "-c"]
+          args: ["source /vault/secrets/config.env && exec /init"]
 
-      #Sidecar για Monitoring
-      - name: clamav-exporter
-        image: rekzi/clamav-prometheus-exporter:1.0.0
-        resources:
-          requests:
-            memory: "32Mi"
-            cpu: "10m"
-          limits:
-            memory: "64Mi"
-            cpu: "100m"
-        ports:
-        - containerPort: 9810
-          name: metrics
-        env:
-        - name: CLAMAV_ADDRESS
-          value: "127.0.0.1"
+          resources:
+            requests:
+              memory: "1200Mi"
+              cpu: "100m"
+            limits:
+              memory: "2048Mi"
+              cpu: "1000m"
+          ports:
+            - containerPort: 3310
+          volumeMounts:
+            - name: db
+              mountPath: /var/lib/clamav
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "clamdcheck.sh"]
+            initialDelaySeconds: 120
+            periodSeconds: 30
+
+        # Sidecar για Monitoring
+        - name: clamav-exporter
+          image: rekzi/clamav-prometheus-exporter:1.0.0
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          ports:
+            - containerPort: 9810
+              name: metrics
+          env:
+            - name: CLAMAV_ADDRESS
+              value: "127.0.0.1"
 
       volumes:
-      - name: db
-        persistentVolumeClaim:
-          claimName: clamav-db
-      - name: yara-rules
-        configMap:
-          name: clamav-yara-rules
-          defaultMode: 0644
+        - name: db
+          persistentVolumeClaim:
+            claimName: clamav-db
+        - name: yara-rules
+          configMap:
+            name: clamav-yara-rules
+            defaultMode: 0644
