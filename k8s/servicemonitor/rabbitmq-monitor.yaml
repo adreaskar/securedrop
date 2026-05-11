@@ -4,14 +4,14 @@ metadata:
   name: rabbitmq-monitor
   namespace: observability
   labels:
-    release: kube-prom-stack # CRITICAL: This label links it to your Prometheus instance
+    release: kube-prom-stack 
 spec:
   selector:
     matchLabels:
-      app: rabbitmq # <--- MUST MATCH your RabbitMQ Service labels
+      app: rabbitmq 
   namespaceSelector:
     matchNames:
-      - default # <--- The namespace where RabbitMQ runs
+      - default
   endpoints:
     - port: metrics
       interval: 30s

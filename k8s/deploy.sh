@@ -37,7 +37,6 @@ apply_folder() {
   done
 }
 
-
 ensure_addons() {
   local missing_addons=()
   
@@ -55,7 +54,16 @@ ensure_addons() {
 
   if [ ${#missing_addons[@]} -gt 0 ]; then
     log "Enabling missing addons: ${missing_addons[*]}"
-    cmd "$MICROK8S_CMD enable ${missing_addons[*]}"
+    
+    local ENABLE_CMD="$MICROK8S_CMD enable ${missing_addons[*]}"
+    
+    # Conditionally append the persistence flag if observability is being enabled
+    if echo "${missing_addons[@]}" | grep -qw "observability"; then
+      log "Applying persistent volume configuration for Observability stack..."
+      ENABLE_CMD="$ENABLE_CMD --kube-prometheus-stack-values=./observability-values.yaml"
+    fi
+    
+    cmd "$ENABLE_CMD"
   else
     log "All required addons are already enabled."
   fi
