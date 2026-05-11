@@ -40,6 +40,7 @@ apply_folder() {
 
 ensure_addons() {
   local missing_addons=()
+  
   log "Checking MicroK8s addons status..."
   local current_status
   current_status=$($MICROK8S_CMD status --format short 2>/dev/null || echo "")
@@ -60,6 +61,7 @@ ensure_addons() {
   fi
 }
 
+# --- Main Execution ---
 
 log "Starting deployment (DRY_RUN=$DRY_RUN)"
 ensure_addons

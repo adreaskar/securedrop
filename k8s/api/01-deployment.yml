@@ -13,11 +13,24 @@ spec:
     metadata:
       labels:
         app: securedrop-api
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "api-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/api"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/api" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
     spec:
+      serviceAccountName: api-sa
       containers:
         - name: securedrop-api
           image: adreaskar/securedrop-api:2.0
           imagePullPolicy: Always
+          command: ["/bin/sh", "-c"]
+          args: [". /vault/secrets/config.env && node src/index.js"]
           resources:
             requests:
               memory: "256Mi"
@@ -27,99 +40,3 @@ spec:
               cpu: "500m"
           ports:
             - containerPort: 3001
-          env:
-            - name: KEYCLOAK_URL
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: KEYCLOAK_URL
-            - name: KEYCLOAK_REALM
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: KEYCLOAK_REALM
-            - name: KEYCLOAK_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: KEYCLOAK_CLIENT_ID
-            - name: SUPABASE_DB_URL
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: SUPABASE_DB_URL
-            - name: DB_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: DB_HOST
-            - name: DB_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: DB_PORT
-            - name: DB_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: DB_NAME
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: DB_USER
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: DB_PASSWORD
-            - name: DB_SSL
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: DB_SSL
-            - name: MINIO_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_ENDPOINT
-            - name: MINIO_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_PORT
-            - name: MINIO_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_ACCESS_KEY
-            - name: MINIO_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_SECRET_KEY
-            - name: MINIO_USE_SSL
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_USE_SSL
-            - name: CORS_ORIGIN
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: CORS_ORIGIN
-            - name: MAX_FILE_SIZE
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MAX_FILE_SIZE
-            - name: NODE_ENV
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: NODE_ENV
-            - name: PORT
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: PORT

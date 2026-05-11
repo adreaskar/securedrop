@@ -4,11 +4,28 @@ metadata:
   name: rabbitmq
 spec:
   replicas: 1
-  selector: { matchLabels: { app: rabbitmq } }
+  selector:
+    matchLabels:
+      app: rabbitmq
   template:
-    metadata: { labels: { app: rabbitmq } }
+    metadata:
+      labels:
+        app: rabbitmq
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "rabbitmq-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/rabbitmq"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/rabbitmq" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
     spec:
-      #Init Container 
+      serviceAccountName: rabbitmq-sa
+      securityContext:
+        fsGroup: 999
+
       initContainers:
         - name: fix-permissions
           image: busybox
@@ -20,63 +37,43 @@ spec:
       containers:
         - name: rabbitmq
           image: rabbitmq:3.12-management
-          # command: ["/bin/sh", "-c", "sleep 3600"] # 
+          command: ["/bin/bash", "-c"]
+          args:
+            [". /vault/secrets/config.env && sleep 5 && exec rabbitmq-server"]
           resources:
             requests:
-              memory: "200Mi"
-              cpu: "50m"
+              memory: "256Mi"
+              cpu: "100m"
             limits:
               memory: "512Mi"
               cpu: "500m"
-          env:
-            - name: RABBITMQ_DEFAULT_USER
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: RABBITMQ_DEFAULT_USER
-            - name: RABBITMQ_DEFAULT_PASS
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: RABBITMQ_DEFAULT_PASS
-            - name: RABBITMQ_NODENAME
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: RABBITMQ_NODENAME
-            
           ports:
-            - containerPort: 5672 
-            - containerPort: 15672 
-          
-          # --- Healthcheck  ---
+            - containerPort: 5672
+            - containerPort: 15672
           livenessProbe:
             tcpSocket:
               port: 5672
-            initialDelaySeconds: 30
-            periodSeconds: 15
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 20
+            periodSeconds: 10
 
           volumeMounts:
-            # ---  (Data) ---
             - name: data
               mountPath: /var/lib/rabbitmq
-            
-           # Mount Definitions
             - name: topology-vol
               mountPath: /etc/rabbitmq/definitions.json
               subPath: definitions.json
-
-            # Mount Config to conf.d (Merges with system config)
             - name: topology-vol
               mountPath: /etc/rabbitmq/conf.d/10-custom.conf
               subPath: 10-custom.conf
-
       volumes:
-        # --- (PVC) ---
         - name: data
           persistentVolumeClaim:
             claimName: rabbitmq-data
-        # Volume for Topology Config        
         - name: topology-vol
           configMap:
             name: rabbitmq-topology

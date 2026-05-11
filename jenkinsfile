@@ -1,0 +1,161 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 60, unit: 'MINUTES')
+    }
+
+    parameters {
+        booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Show what would be built without pushing to Docker Hub')
+    }
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_BRANCH_NAME = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+                }
+            }
+        }
+
+        stage('Detect Services') {
+            steps {
+                script {
+                    def serviceDefinitions = [
+                        'securedrop': [context: 'securedrop', dockerfiles: ['Dockerfile.prod', 'Dockerfile']],
+                        'securedrop-api': [context: 'securedrop-api', dockerfiles: ['Dockerfile']],
+                        'securedrop-scanner': [context: 'securedrop-scanner', dockerfiles: ['Dockerfile']],
+                        'node-red': [context: 'node-red', dockerfiles: ['Dockerfile.dev', 'Dockerfile']]
+                    ]
+
+                    def ignoredTopLevel = ['.git', '.github', 'docs', 'k8s', 'screenshots', 'iac']
+                    def changedFiles = []
+                    def selectedServices = [] as Set
+                    def buildAll = false
+
+                    try {
+                        def previousCommit = sh(script: 'git rev-parse HEAD~1', returnStdout: true).trim()
+                        changedFiles = sh(
+                            script: "git diff --name-only ${previousCommit} HEAD",
+                            returnStdout: true
+                        ).trim().split('\n').findAll { it }
+                    } catch (Exception ignored) {
+                        buildAll = true
+                    }
+
+                    if (!buildAll) {
+                        if (changedFiles.isEmpty()) {
+                            env.SKIP_BUILD = 'true'
+                            echo 'No changes detected.'
+                            return
+                        }
+
+                        for (String filePath in changedFiles) {
+                            def topLevel = filePath.contains('/') ? filePath.split('/')[0] : filePath
+
+                            if (ignoredTopLevel.contains(topLevel)) {
+                                continue
+                            }
+
+                            if (serviceDefinitions.containsKey(topLevel)) {
+                                selectedServices << topLevel
+                                continue
+                            }
+
+                            buildAll = true
+                            break
+                        }
+                    }
+
+                    if (buildAll) {
+                        selectedServices.addAll(serviceDefinitions.keySet())
+                    }
+
+                    if (selectedServices.isEmpty()) {
+                        env.SKIP_BUILD = 'true'
+                        echo 'No service changes detected.'
+                        return
+                    }
+
+                    env.SERVICES_TO_BUILD = selectedServices.join(',')
+                    env.SERVICE_DEFINITIONS = groovy.json.JsonOutput.toJson(serviceDefinitions)
+
+                    echo "Services to build: ${env.SERVICES_TO_BUILD}"
+                }
+            }
+        }
+
+        stage('Build and Push') {
+            when {
+                expression { env.SKIP_BUILD != 'true' }
+            }
+            steps {
+                script {
+                    def serviceDefinitions = new groovy.json.JsonSlurperClassic().parseText(env.SERVICE_DEFINITIONS)
+                    def servicesToBuild = env.SERVICES_TO_BUILD.split(',').collect { it.trim() }.findAll { it }
+
+                    if (params.DRY_RUN) {
+                        echo 'Dry run enabled. No images will be pushed.'
+                    } else {
+                        sh 'echo "$DOCKERHUB_CREDENTIALS_PSW" | docker login -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin'
+                    }
+
+                    for (String serviceName in servicesToBuild) {
+                        def serviceConfig = serviceDefinitions[serviceName]
+                        def dockerfile = null
+
+                        for (String candidate in serviceConfig.dockerfiles) {
+                            if (fileExists("${serviceConfig.context}/${candidate}")) {
+                                dockerfile = "${serviceConfig.context}/${candidate}"
+                                break
+                            }
+                        }
+
+                        if (!dockerfile) {
+                            error("No Dockerfile found for ${serviceName}")
+                        }
+
+                        def imageName = "${DOCKERHUB_CREDENTIALS_USR}/${serviceName}"
+
+                        echo "Building ${serviceName} from ${dockerfile}"
+                        echo "Image tags: ${imageName}:${IMAGE_TAG}, ${imageName}:latest"
+
+                        if (!params.DRY_RUN) {
+                            sh """
+                                docker build \
+                                    -f "${dockerfile}" \
+                                    -t "${imageName}:${IMAGE_TAG}" \
+                                    -t "${imageName}:latest" \
+                                    "./${serviceConfig.context}"
+                            """
+
+                            sh """
+                                docker push "${imageName}:${IMAGE_TAG}"
+                                docker push "${imageName}:latest"
+                            """
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                sh 'command -v docker >/dev/null 2>&1 && docker logout || true'
+            }
+        }
+    }
+}

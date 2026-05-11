@@ -6,8 +6,32 @@ spec:
   replicas: 1
   selector: { matchLabels: { app: minio } }
   template:
-    metadata: { labels: { app: minio } }
+    metadata:
+      labels: { app: minio }
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "minio-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/minio"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/minio" -}}
+          export MINIO_ROOT_USER='{{ .Data.data.MINIO_ROOT_USER }}'
+          export MINIO_ROOT_PASSWORD='{{ .Data.data.MINIO_ROOT_PASSWORD }}'
+          export MINIO_SERVER_URL='{{ .Data.data.MINIO_SERVER_URL }}'
+          export MINIO_BROWSER_REDIRECT_URL='{{ .Data.data.MINIO_BROWSER_REDIRECT_URL }}'
+          export MINIO_PROMETHEUS_AUTH_TYPE='{{ .Data.data.MINIO_PROMETHEUS_AUTH_TYPE }}'
+          export MINIO_NOTIFY_AMQP_ENABLE_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_ENABLE_rabbitmq }}'
+          export MINIO_NOTIFY_AMQP_URL_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_URL_rabbitmq }}'
+          export MINIO_NOTIFY_AMQP_EXCHANGE_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_EXCHANGE_rabbitmq }}'
+          export MINIO_NOTIFY_AMQP_EXCHANGE_TYPE_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_EXCHANGE_TYPE_rabbitmq }}'
+          export MINIO_NOTIFY_AMQP_ROUTING_KEY_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_ROUTING_KEY_rabbitmq }}'
+          export MINIO_NOTIFY_AMQP_MANDATORY_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_MANDATORY_rabbitmq }}'
+          export MINIO_NOTIFY_AMQP_DURABLE_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_DURABLE_rabbitmq }}'
+          export MINIO_NOTIFY_AMQP_FORMAT_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_FORMAT_rabbitmq }}'
+          export MINIO_NOTIFY_AMQP_COMMENT_rabbitmq='{{ .Data.data.MINIO_NOTIFY_AMQP_COMMENT_rabbitmq }}'
+          export TARGET_BUCKET='{{ .Data.data.TARGET_BUCKET }}'
+          {{- end }}
     spec:
+      serviceAccountName: minio-sa
       initContainers:
         - name: fix-permissions
           image: busybox
@@ -15,97 +39,20 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
-
       containers:
         - name: minio
           image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-          args: ["server", "/data", "--console-address", ":9001"]
-          resources:
-            requests:
-              memory: "300Mi"
-              cpu: "50m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-          env:
-            - name: MINIO_ROOT_USER
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_ROOT_USER
-            - name: MINIO_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_ROOT_PASSWORD
-            - name: MINIO_SERVER_URL
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_SERVER_URL
-            - name: MINIO_BROWSER_REDIRECT_URL
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_BROWSER_REDIRECT_URL   
-            - name: MINIO_PROMETHEUS_AUTH_TYPE
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_PROMETHEUS_AUTH_TYPE
-            - name: MINIO_NOTIFY_AMQP_ENABLE_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_NOTIFY_AMQP_ENABLE_rabbitmq
-            - name: MINIO_NOTIFY_AMQP_URL_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: AMQP_URL_ENV
-            - name: MINIO_NOTIFY_AMQP_EXCHANGE_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_NOTIFY_AMQP_EXCHANGE_rabbitmq
-            - name: MINIO_NOTIFY_AMQP_EXCHANGE_TYPE_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_NOTIFY_AMQP_EXCHANGE_TYPE_rabbitmq
-            - name: MINIO_NOTIFY_AMQP_ROUTING_KEY_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_NOTIFY_AMQP_ROUTING_KEY_rabbitmq
-            - name: MINIO_NOTIFY_AMQP_MANDATORY_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_NOTIFY_AMQP_MANDATORY_rabbitmq
-            - name: MINIO_NOTIFY_AMQP_DURABLE_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_NOTIFY_AMQP_DURABLE_rabbitmq
-            - name: MINIO_NOTIFY_AMQP_FORMAT_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_NOTIFY_AMQP_FORMAT_rabbitmq
-            - name: MINIO_NOTIFY_AMQP_COMMENT_rabbitmq
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: MINIO_NOTIFY_AMQP_COMMENT_rabbitmq
-
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              . /vault/secrets/config.env
+              exec minio server /data --console-address :9001
           ports:
             - containerPort: 9000
             - containerPort: 9001
           volumeMounts:
             - name: data
               mountPath: /data
-
 
       volumes:
         - name: data

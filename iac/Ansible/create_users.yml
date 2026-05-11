@@ -1,0 +1,34 @@
+---
+- name: Create Users and Configure Sudo Access
+  hosts: vm2
+  become: yes
+
+  
+  vars_files:
+    - users_vars_DO_NOT_SHARE.yml
+
+  tasks:
+    - name: Ensure users exist and are added to the sudo group
+      user:
+        name: "{{ item.username }}"
+        state: present
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+        create_home: yes
+      loop: "{{ admin_users }}"
+
+    - name: Set authorized keys for SSH login
+      authorized_key:
+        user: "{{ item.username }}"
+        state: present
+        key: "{{ item.pub_key }}"
+      loop: "{{ admin_users }}"
+
+    - name: Allow users to run sudo commands without a password
+      copy:
+        dest: "/etc/sudoers.d/{{ item.username }}"
+        content: "{{ item.username }} ALL=(ALL) NOPASSWD: ALL\n"
+        mode: '0440'
+        validate: /usr/sbin/visudo -cf %s
+      loop: "{{ admin_users }}"

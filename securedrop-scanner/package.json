@@ -1,0 +1,10 @@
+{
+  "name": "securedrop-scanner",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "minio": "^8.0.1",
+    "axios": "^1.7.9"
+  }
+}

@@ -4,22 +4,38 @@ metadata:
   name: nodered
 spec:
   replicas: 1
-  selector: { matchLabels: { app: nodered } }
+  selector:
+    matchLabels:
+      app: nodered
   template:
-    metadata: { labels: { app: nodered } }
+    metadata:
+      labels:
+        app: nodered
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "nodered-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/nodered"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/nodered" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
     spec:
-      # Fix Permissions (User 1000: node-red)
-      #initContainers:
-      #  - name: fix-permissions
-      #    image: busybox
-      #    command: ["sh", "-c", "chown -R 1000:1000 /data"]
-      #    volumeMounts:
-      #      - name: data
-      #        mountPath: /data
+      serviceAccountName: nodered-sa
 
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /data"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
       containers:
         - name: nodered
           image: adreaskar/securedrop-nodered:2.0
+          command: ["/bin/sh", "-c"]
+          args: [". /vault/secrets/config.env && ./node-red-start.sh"]
           resources:
             requests:
               memory: "128Mi"
@@ -29,22 +45,9 @@ spec:
               cpu: "500m"
           ports:
             - containerPort: 1880
-          env:
-            - name: TZ
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: TZ
-            - name: NODE_RED_CREDENTIAL_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: securedrop-secrets
-                  key: NODE_RED_CREDENTIAL_SECRET
           volumeMounts:
             - name: data
               mountPath: /data
-
-          # Healthcheck (απλό TCP check)
           livenessProbe:
             tcpSocket:
               port: 1880

@@ -1,0 +1,73 @@
+---
+- name: Configure, Initialize and Unseal HashiCorp Vault
+  hosts: vm2
+  become: yes
+  
+  #Ορίζουμε τη μεταβλητή περιβάλλοντος που χρειάζεται το Vault CLI
+  environment:
+    VAULT_ADDR: "http://127.0.0.1:8200"
+
+  tasks:
+    #Ρύθμιση του Vault για να βλέπει internet και να έχει Web UI
+    - name: Ensure Vault data directory exists
+      file:
+        path: /opt/vault/data
+        state: directory
+        owner: vault
+        group: vault
+
+    - name: Configure Vault configuration file (vault.hcl)
+      copy:
+        dest: /etc/vault.d/vault.hcl
+        content: |
+          ui = true
+          disable_mlock = true
+          api_addr = "https://vault.securedrop.gr"
+          storage "file" {
+            path = "/opt/vault/data"
+          }
+          listener "tcp" {
+            address     = "127.0.0.1:8200"
+            tls_disable = 1
+          }
+      notify: Restart Vault
+
+    # Κάνουμε force τα handlers να τρέξουν τώρα, για να ξεκινήσει το Vault με το νέο config
+    - name: Force restart Vault to apply changes
+      meta: flush_handlers
+
+    #Έλεγχος αν το Vault είναι ήδη Initialized
+    - name: Check Vault status
+      shell: vault status -format=json
+      register: vault_status
+      failed_when: false
+      changed_when: false
+
+    #Αρχικοποίηση (Init) - Τρέχει ΜΟΝΟ αν δεν είναι ήδη initialized
+    - name: Initialize Vault
+      shell: vault operator init -format=json
+      register: vault_init
+      when: (vault_status.stdout | from_json).initialized == false
+
+    #Αποθήκευση των κλειδιών τοπικά (στο δικό σου WSL!)
+    - name: Save Vault keys locally
+      copy:
+        content: "{{ vault_init.stdout }}"
+        dest: "./vault_keys_DO_NOT_SHARE.json"
+        mode: '0600'
+      delegate_to: localhost
+      become: no
+      when: vault_init.changed
+
+    #Ξεκλείδωμα (Unseal) χρησιμοποιώντας τα 3 πρώτα κλειδιά
+    - name: Unseal Vault
+      shell: "vault operator unseal {{ item }}"
+      loop: "{{ (vault_init.stdout | from_json).unseal_keys_b64[0:3] }}"
+      when: vault_init.changed or (vault_status.stdout | from_json).sealed == true
+      no_log: true
+
+  handlers:
+    - name: Restart Vault
+      systemd:
+        name: vault
+        state: restarted
