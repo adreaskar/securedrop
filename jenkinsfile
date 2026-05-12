@@ -1,3 +1,10 @@
+def serviceDefinitions = [
+    'securedrop': [context: 'securedrop', dockerfiles: ['Dockerfile.prod', 'Dockerfile']],
+    'securedrop-api': [context: 'securedrop-api', dockerfiles: ['Dockerfile']],
+    'securedrop-scanner': [context: 'securedrop-scanner', dockerfiles: ['Dockerfile']],
+    'node-red': [context: 'node-red', dockerfiles: ['Dockerfile.dev', 'Dockerfile']]
+]
+
 pipeline {
     agent any
 
@@ -24,21 +31,32 @@ pipeline {
                     env.GIT_BRANCH_NAME = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
-                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+
+                    def releaseTag = sh(
+                        script: "git tag --points-at HEAD | grep -E '^v?[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9A-Za-z.-]+)?$' | head -n 1 || true",
+                        returnStdout: true
+                    ).trim()
+
+                    if (releaseTag) {
+                        env.RELEASE_VERSION = releaseTag.startsWith('v') ? releaseTag.substring(1) : releaseTag
+                        env.IMAGE_TAG = env.RELEASE_VERSION
+                        env.PUSH_LATEST = 'true'
+                        echo "Release tag detected on HEAD: ${releaseTag}"
+                    } else {
+                        env.SKIP_BUILD = 'true'
+                        currentBuild.description = 'Skipped: no semantic tag on commit'
+                        echo 'No semantic release tag found on this commit. Image build is tag-only and will be skipped.'
+                    }
                 }
             }
         }
 
         stage('Detect Services') {
+            when {
+                expression { env.SKIP_BUILD != 'true' }
+            }
             steps {
                 script {
-                    def serviceDefinitions = [
-                        'securedrop': [context: 'securedrop', dockerfiles: ['Dockerfile.prod', 'Dockerfile']],
-                        'securedrop-api': [context: 'securedrop-api', dockerfiles: ['Dockerfile']],
-                        'securedrop-scanner': [context: 'securedrop-scanner', dockerfiles: ['Dockerfile']],
-                        'node-red': [context: 'node-red', dockerfiles: ['Dockerfile.dev', 'Dockerfile']]
-                    ]
-
                     def ignoredTopLevel = ['.git', '.github', 'docs', 'k8s', 'screenshots', 'iac']
                     def changedFiles = []
                     def selectedServices = [] as Set
@@ -89,7 +107,6 @@ pipeline {
                     }
 
                     env.SERVICES_TO_BUILD = selectedServices.join(',')
-                    env.SERVICE_DEFINITIONS = groovy.json.JsonOutput.toJson(serviceDefinitions)
 
                     echo "Services to build: ${env.SERVICES_TO_BUILD}"
                 }
@@ -102,8 +119,12 @@ pipeline {
             }
             steps {
                 script {
-                    def serviceDefinitions = new groovy.json.JsonSlurperClassic().parseText(env.SERVICE_DEFINITIONS)
                     def servicesToBuild = env.SERVICES_TO_BUILD.split(',').collect { it.trim() }.findAll { it }
+                    def imageTags = [env.IMAGE_TAG]
+
+                    if (env.PUSH_LATEST == 'true') {
+                        imageTags << 'latest'
+                    }
 
                     if (params.DRY_RUN) {
                         echo 'Dry run enabled. No images will be pushed.'
@@ -127,23 +148,24 @@ pipeline {
                         }
 
                         def imageName = "${DOCKERHUB_CREDENTIALS_USR}/${serviceName}"
+                        def tagList = imageTags.collect { tag -> "${imageName}:${tag}" }
 
                         echo "Building ${serviceName} from ${dockerfile}"
-                        echo "Image tags: ${imageName}:${IMAGE_TAG}, ${imageName}:latest"
+                        echo "Image tags: ${tagList.join(', ')}"
 
                         if (!params.DRY_RUN) {
+                            def buildTagArgs = imageTags.collect { tag -> "-t \"${imageName}:${tag}\"" }.join(' ')
+
                             sh """
                                 docker build \
                                     -f "${dockerfile}" \
-                                    -t "${imageName}:${IMAGE_TAG}" \
-                                    -t "${imageName}:latest" \
+                                    ${buildTagArgs} \
                                     "./${serviceConfig.context}"
                             """
 
-                            sh """
-                                docker push "${imageName}:${IMAGE_TAG}"
-                                docker push "${imageName}:latest"
-                            """
+                            for (String tag in imageTags) {
+                                sh "docker push \"${imageName}:${tag}\""
+                            }
                         }
                     }
                 }
