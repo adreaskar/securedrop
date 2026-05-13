@@ -37,7 +37,7 @@ pipeline {
                     env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
 
                     // Skip if not on main branch
-                    if (!env.GIT_BRANCH_NAME.matches('(main|master)')) {
+                    if (!env.GIT_BRANCH_NAME.matches('(main|master|HEAD)')) {
                         env.SKIP_BUILD = 'true'
                         currentBuild.description = "Skipped: not on main branch (on ${env.GIT_BRANCH_NAME})"
                         echo "Skipping: pipeline only runs on main/master branch, currently on ${env.GIT_BRANCH_NAME}"
