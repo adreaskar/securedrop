@@ -69,7 +69,7 @@ pipeline {
             }
             steps {
                 script {
-                    def ignoredTopLevel = ['.git', '.github', 'docs', 'k8s', 'screenshots', 'iac']
+                    def ignoredTopLevel = ['.git', '.github', 'docs', 'k8s', 'screenshots', 'iac', 'pipelines']
                     def changedFiles = []
                     def selectedServices = [] as Set
                     def buildAll = false
