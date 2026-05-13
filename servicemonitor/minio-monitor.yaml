@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: minio-monitor
+  namespace: observability
+  labels:
+    release: kube-prom-stack
+spec:
+  selector:
+    matchLabels:
+      app: minio 
+  namespaceSelector:
+    matchNames:
+      - default 
+  endpoints:
+    - port: api 
+      interval: 30s
+      path: /minio/v2/metrics/cluster
+      scheme: http

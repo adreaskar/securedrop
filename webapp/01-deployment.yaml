@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securedrop-webapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: securedrop-webapp
+  template:
+    metadata:
+      labels:
+        app: securedrop-webapp
+    spec:
+      containers:
+        - name: securedrop-webapp
+          image: adreaskar/securedrop-webapp:2.0
+          ports:
+            - containerPort: 80
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

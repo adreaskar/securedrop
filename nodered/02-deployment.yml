@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodered
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nodered
+  template:
+    metadata:
+      labels:
+        app: nodered
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "nodered-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/nodered"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/nodered" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
+    spec:
+      serviceAccountName: nodered-sa
+
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /data"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: nodered
+          image: adreaskar/securedrop-nodered:2.0
+          command: ["/bin/sh", "-c"]
+          args: [". /vault/secrets/config.env && ./node-red-start.sh"]
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "384Mi"
+              cpu: "500m"
+          ports:
+            - containerPort: 1880
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            tcpSocket:
+              port: 1880
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nodered-data

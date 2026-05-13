@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securedrop-api
+  labels:
+    app: securedrop-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: securedrop-api
+  template:
+    metadata:
+      labels:
+        app: securedrop-api
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "api-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/api"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/api" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
+    spec:
+      serviceAccountName: api-sa
+      containers:
+        - name: securedrop-api
+          image: adreaskar/securedrop-api:2.0
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c"]
+          args: [". /vault/secrets/config.env && node src/index.js"]
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          ports:
+            - containerPort: 3001

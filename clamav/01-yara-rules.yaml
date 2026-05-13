@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clamav-yara-rules
+data:
+  custom.yara: |
+    rule Custom_Eicar_Detection {
+        meta:
+            description = "Detects EICAR parts even in broken scripts"
+            priority = 1
+        strings:
+            $s1 = "EICAR-STANDARD-ANTIVIRUS-TEST-FILE" ascii wide
+            $s2 = "P^^)7CC)7"
+        condition:
+            $s1 or $s2
+    }

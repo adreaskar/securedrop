@@ -1,0 +1,119 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: securedrop-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: web, websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: default-https-redirect@kubernetescrd
+
+spec:
+  tls:
+    - hosts:
+        - securedrop.gr
+        - api.securedrop.gr
+        - keycloak.securedrop.gr
+        - s3.securedrop.gr
+        - minio.securedrop.gr
+        - rabbitmq.securedrop.gr
+        - nodered.securedrop.gr
+        - thingsboard.securedrop.gr
+      secretName: securedrop-tls-cert
+  rules:
+    # --- 1. Node-RED ---
+    - host: nodered.securedrop.gr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nodered
+                port:
+                  number: 1880
+
+    # --- 2. RabbitMQ Management ---
+    - host: rabbitmq.securedrop.gr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rabbitmq
+                port:
+                  number: 15672
+
+    # --- 3. MinIO Console ---
+    - host: minio.securedrop.gr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio-service
+                port:
+                  number: 9001
+
+    # --- 4. MinIO API ---
+    - host: s3.securedrop.gr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio-service
+                port:
+                  number: 9000
+
+    # --- 5. Keycloak ---
+    - host: keycloak.securedrop.gr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak-service
+                port:
+                  number: 8080
+
+    # --- 6. Thingsboard ---
+    - host: thingsboard.securedrop.gr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: thingsboard
+                port:
+                  number: 9090
+
+    # --- 7. Securedrop Api ---
+    - host: api.securedrop.gr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: securedrop-api-service
+                port:
+                  number: 3001
+    # --- 8. Securedrop WebApp ---
+    - host: securedrop.gr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: securedrop-webapp-service
+                port:
+                  number: 8081

@@ -1,0 +1,870 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-topology
+data:
+ # 1. We name this '10-custom.conf' so it's loaded automatically
+  10-custom.conf: |
+    management.load_definitions = /etc/rabbitmq/definitions.json
+    log.console.level = info
+  definitions.json: |
+    {
+      "rabbit_version": "3.12.14",
+      "rabbitmq_version": "3.12.14",
+      "product_name": "RabbitMQ",
+      "product_version": "3.12.14",
+      "users": [
+        {
+          "name": "securedrop",
+          "password_hash": "m7ahxgBxXJ+sw/veff4pHq5+hCp9/G1F2T8bGaoIPmOhtGCy",
+          "hashing_algorithm": "rabbit_password_hashing_sha256",
+          "tags": [
+            "administrator"
+          ],
+          "limits": {}
+        }
+      ],
+      "vhosts": [
+        {
+          "name": "/"
+        }
+      ],
+      "permissions": [
+        {
+          "user": "securedrop",
+          "vhost": "/",
+          "configure": ".*",
+          "write": ".*",
+          "read": ".*"
+        }
+      ],
+      "topic_permissions": [],
+      "parameters": [],
+      "global_parameters": [
+        {
+          "name": "internal_cluster_id",
+          "value": "rabbitmq-cluster-id-G9DfgBOBkWGkhPMlrG2cGw"
+        }
+      ],
+      "policies": [],
+      "queues": [
+        {
+          "name": "tb_rule_engine.main.7",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.7",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.6",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.6",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.0",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.1",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.9",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.8",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.4",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.0",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.3",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.3",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.4",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.2",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.8",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.9",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.2",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.5",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.4",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.2",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.0",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.6",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.8",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.0",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.3",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.4",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.5",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.8",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.4",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.9",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.2",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.notifications.thingsboard-76bcfddf7-xzwwl",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.1",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.6",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.6",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.1",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.0",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.5",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.1",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.7",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.9",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.2",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.3",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.notifications.thingsboard-76bcfddf7-xzwwl",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.1",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.8",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_ota_package",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.3",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.5",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.8",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.0",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_housekeeper",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.8",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_housekeeper.reprocessing",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.9",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.6",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.1",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.9",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_transport.notifications.thingsboard-76bcfddf7-xzwwl",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.3",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.5",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_version_control.7",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.2",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.5",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.3",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.2",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_transport.api.responses.thingsboard-76bcfddf7-xzwwl",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.6",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.notifications.thingsboard-76bcfddf7-xzwwl",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_transport.api.requests",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.4",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_edge.4",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_core.7",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.9",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.sq.5",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_usage_stats.7",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.hp.7",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "tb_rule_engine.main.0",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        },
+        {
+          "name": "quarantine-scan-queue",
+          "vhost": "/",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "tb_core.1",
+          "vhost": "/",
+          "durable": false,
+          "auto_delete": false,
+          "arguments": {
+            "x-max-length-bytes": 1048576000,
+            "x-message-ttl": 604800000
+          }
+        }
+      ],
+      "exchanges": [
+        {
+          "name": "minio-exchange",
+          "vhost": "/",
+          "type": "topic",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        }
+      ],
+      "bindings": [
+        {
+          "source": "minio-exchange",
+          "vhost": "/",
+          "destination": "quarantine-scan-queue",
+          "destination_type": "queue",
+          "routing_key": "minio.event",
+          "arguments": {}
+        }
+      ]
+    }

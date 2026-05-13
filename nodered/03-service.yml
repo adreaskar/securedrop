@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodered
+  ## added for nodered-monitor.yaml
+  labels:            # <--- Η ταυτότητα για τον Prometheus
+    app: nodered
+  ## end added
+spec:
+  selector: { app: nodered }
+  ports:
+    - name: http
+      port: 1880
+      targetPort: 1880
+      protocol: TCP
