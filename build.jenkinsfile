@@ -19,6 +19,10 @@ pipeline {
         booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Show what would be built without pushing to Docker Hub')
     }
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
     }
@@ -31,6 +35,14 @@ pipeline {
                     env.GIT_BRANCH_NAME = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+
+                    // Skip if not on main branch
+                    if (!env.GIT_BRANCH_NAME.matches('(main|master)')) {
+                        env.SKIP_BUILD = 'true'
+                        currentBuild.description = "Skipped: not on main branch (on ${env.GIT_BRANCH_NAME})"
+                        echo "Skipping: pipeline only runs on main/master branch, currently on ${env.GIT_BRANCH_NAME}"
+                        return
+                    }
 
                     def releaseTag = sh(
                         script: '''git tag --points-at HEAD | grep -E '^v?[0-9]+[.][0-9]+[.][0-9]+([.-][0-9A-Za-z.-]+)?$' | head -n 1 || true''',
@@ -166,7 +178,19 @@ pipeline {
                             for (String tag in imageTags) {
                                 sh "docker push \"${imageName}:${tag}\""
                             }
+                            // collect mapping for downstream job
+                            if (!binding.hasVariable('imageMapEntries')) {
+                                imageMapEntries = []
+                            }
+                            imageMapEntries << "${serviceName}=${imageName}:${env.IMAGE_TAG}"
                         }
+                    }
+
+                    // Trigger downstream job to update manifests with new tags
+                    if (!params.DRY_RUN && binding.hasVariable('imageMapEntries')) {
+                        def imageMap = imageMapEntries.join(',')
+                        echo "Triggering downstream job 'update-manifests' with IMAGE_MAP=${imageMap}"
+                        build job: 'update-manifests', parameters: [string(name: 'IMAGE_MAP', value: imageMap), string(name: 'TARGET_BRANCH', value: 'manifests')], wait: true
                     }
                 }
             }

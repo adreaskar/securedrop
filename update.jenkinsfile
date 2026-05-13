@@ -1,0 +1,76 @@
+pipeline {
+  agent any
+
+  parameters {
+    string(name: 'IMAGE_MAP', defaultValue: '', description: 'Comma-separated list service=image:tag')
+    string(name: 'CREDENTIAL_ID', defaultValue: 'manifest-repo-creds', description: 'SSH credential id with push access')
+  }
+
+  options {
+    timestamps()
+  }
+
+  stages {
+    stage('Checkout manifests repo') {
+      steps {
+        script {
+          // repo and branch are fixed
+          echo "Cloning git@github.com:adreaskar/securedrop-manifests.git branch manifests"
+        }
+        sshagent (credentials: [params.CREDENTIAL_ID]) {
+          sh 'rm -rf manifests-repo || true'
+          sh 'git clone --branch "manifests" git@github.com:adreaskar/securedrop-manifests.git manifests-repo'
+        }
+      }
+    }
+
+    stage('Update manifests') {
+      steps {
+        sh '''
+          #!/bin/bash
+          set -euo pipefail
+
+          if [ -z "${IMAGE_MAP}" ]; then
+            echo "No IMAGE_MAP provided, nothing to do."
+            exit 0
+          fi
+
+          cd manifests-repo
+
+          # IMAGE_MAP format: svc=namespace/svc:tag,svc2=namespace2/svc2:tag
+          IFS=',' read -r -a entries <<< "${IMAGE_MAP}"
+
+          for e in "${entries[@]}"; do
+            svc="${e%%=*}"
+            img="${e#*=}"
+            echo "Updating image for $svc -> $img"
+
+            if command -v yq >/dev/null 2>&1; then
+              # Replace by container name where possible
+              yq eval --inplace "(.spec.template.spec.containers[] | select(.name == env(svc))).image = env(img)" -e **/*.yaml || true
+              yq eval --inplace "(.spec.template.spec.containers[] | select(.name == env(svc))).image = env(img)" -e **/*.yml || true
+            else
+              # Fallback: replace occurrences of 'image: <something-containing-svc>' with new image
+              grep -RIl --exclude-dir=.git "image:.*${svc}" . | xargs -r sed -E -i "s#(image:\s*).*${svc}[^\n\r]*#\1${img}#g"
+            fi
+          done
+
+          # Commit only if changes
+          if git status --porcelain | grep -q .; then
+            git add -A
+            git commit -m "chore(ci): update images ${IMAGE_MAP}"
+            git push origin "manifests"
+          else
+            echo "No manifest changes detected."
+          fi
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      script { echo 'update-manifests job finished' }
+    }
+  }
+}
