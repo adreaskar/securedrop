@@ -15,11 +15,11 @@ pipeline {
       steps {
         script {
           // repo and branch are fixed
-          echo "Cloning git@github.com:adreaskar/securedrop-manifests.git branch manifests"
+          echo "Cloning git@github.com:adreaskar/securedrop.git branch manifests"
         }
         sshagent (credentials: [params.CREDENTIAL_ID]) {
           sh 'rm -rf manifests-repo || true'
-          sh 'git clone --branch "manifests" git@github.com:adreaskar/securedrop-manifests.git manifests-repo'
+          sh 'git clone --branch "manifests" git@github.com:adreaskar/securedrop.git manifests-repo'
         }
       }
     }
