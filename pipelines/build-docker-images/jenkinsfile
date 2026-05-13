@@ -201,6 +201,7 @@ pipeline {
         always {
             script {
                 sh 'command -v docker >/dev/null 2>&1 && docker logout || true'
+                sh 'command -v docker >/dev/null 2>&1 && docker image prune -a -f || true'
             }
         }
     }
