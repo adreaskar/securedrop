@@ -17,9 +17,11 @@ pipeline {
           // repo and branch are fixed
           echo "Cloning git@github.com:adreaskar/securedrop.git branch manifests"
         }
-        sshagent (credentials: [params.CREDENTIAL_ID]) {
-          sh 'rm -rf manifests-repo || true'
-          sh 'git clone --branch "manifests" git@github.com:adreaskar/securedrop.git manifests-repo'
+        withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+          sh '''
+            rm -rf manifests-repo || true
+            git clone --branch "manifests" git@github.com:adreaskar/securedrop.git manifests-repo
+          '''
         }
       }
     }
