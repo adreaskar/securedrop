@@ -20,6 +20,16 @@ pipeline {
         withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
           sh '''
             rm -rf manifests-repo || true
+            
+            # Fix permissions on the SSH key if it exists
+            if [ -f /var/lib/jenkins/.ssh/id_ed25519 ]; then
+              chmod 600 /var/lib/jenkins/.ssh/id_ed25519
+            fi
+            
+            # Add GitHub to known_hosts to avoid ssh key verification prompts
+            mkdir -p /var/lib/jenkins/.ssh
+            ssh-keyscan -t ed25519 github.com >> /var/lib/jenkins/.ssh/known_hosts 2>/dev/null || true
+            
             git clone --branch "manifests" git@github.com:adreaskar/securedrop.git manifests-repo
           '''
         }
@@ -28,44 +38,59 @@ pipeline {
 
     stage('Update manifests') {
       steps {
-        sh '''
-          #!/bin/bash
-          set -euo pipefail
+        withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+          sh '''
+            #!/bin/bash
+            set -euo pipefail
 
-          if [ -z "${IMAGE_MAP}" ]; then
-            echo "No IMAGE_MAP provided, nothing to do."
-            exit 0
-          fi
-
-          cd manifests-repo
-
-          # IMAGE_MAP format: svc=namespace/svc:tag,svc2=namespace2/svc2:tag
-          IFS=',' read -r -a entries <<< "${IMAGE_MAP}"
-
-          for e in "${entries[@]}"; do
-            svc="${e%%=*}"
-            img="${e#*=}"
-            echo "Updating image for $svc -> $img"
-
-            if command -v yq >/dev/null 2>&1; then
-              # Replace by container name where possible
-              yq eval --inplace "(.spec.template.spec.containers[] | select(.name == env(svc))).image = env(img)" -e **/*.yaml || true
-              yq eval --inplace "(.spec.template.spec.containers[] | select(.name == env(svc))).image = env(img)" -e **/*.yml || true
-            else
-              # Fallback: replace occurrences of 'image: <something-containing-svc>' with new image
-              grep -RIl --exclude-dir=.git "image:.*${svc}" . | xargs -r sed -E -i "s#(image:\\s*).*${svc}[^\\n\\r]*#\\1${img}#g"
+            if [ -z "${IMAGE_MAP}" ]; then
+              echo "No IMAGE_MAP provided, nothing to do."
+              exit 0
             fi
-          done
 
-          # Commit only if changes
-          if git status --porcelain | grep -q .; then
-            git add -A
-            git commit -m "chore(ci): update images ${IMAGE_MAP}"
-            git push origin "manifests"
-          else
-            echo "No manifest changes detected."
-          fi
-        '''
+            cd manifests-repo
+
+            # Configure git user
+            git config user.email "ci@securedrop.local"
+            git config user.name "CI Pipeline"
+
+            # Fix permissions on the SSH key if it exists
+            if [ -f /var/lib/jenkins/.ssh/id_ed25519 ]; then
+              chmod 600 /var/lib/jenkins/.ssh/id_ed25519
+            fi
+            
+            # Add GitHub to known_hosts to avoid ssh key verification prompts
+            mkdir -p /var/lib/jenkins/.ssh
+            ssh-keyscan -t ed25519 github.com >> /var/lib/jenkins/.ssh/known_hosts 2>/dev/null || true
+
+            # IMAGE_MAP format: svc=namespace/svc:tag,svc2=namespace2/svc2:tag
+            IFS=',' read -r -a entries <<< "${IMAGE_MAP}"
+
+            for e in "${entries[@]}"; do
+              svc="${e%%=*}"
+              img="${e#*=}"
+              echo "Updating image for $svc -> $img"
+
+              if command -v yq >/dev/null 2>&1; then
+                # Replace by container name where possible
+                yq eval --inplace "(.spec.template.spec.containers[] | select(.name == env(svc))).image = env(img)" -e **/*.yaml || true
+                yq eval --inplace "(.spec.template.spec.containers[] | select(.name == env(svc))).image = env(img)" -e **/*.yml || true
+              else
+                # Fallback: replace occurrences of 'image: <something-containing-svc>' with new image
+                grep -RIl --exclude-dir=.git "image:.*${svc}" . | xargs -r sed -E -i "s#(image:\\s*).*${svc}[^\\n\\r]*#\\1${img}#g"
+              fi
+            done
+
+            # Commit only if changes
+            if git status --porcelain | grep -q .; then
+              git add -A
+              git commit -m "chore(ci): update images ${IMAGE_MAP}"
+              git push origin "manifests"
+            else
+              echo "No manifest changes detected."
+            fi
+          '''
+        }
       }
     }
   }
