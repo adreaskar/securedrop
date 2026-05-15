@@ -63,6 +63,17 @@ pipeline {
             mkdir -p /var/lib/jenkins/.ssh
             ssh-keyscan -t ed25519 github.com >> /var/lib/jenkins/.ssh/known_hosts 2>/dev/null || true
 
+            # Map build services to manifests branch folders
+            declare -A manifestFolders=(
+              ["keycloak"]="keycloak"
+              ["rabbitmq"]="rabbitmq"
+              ["node-red"]="nodered"
+              ["securedrop"]="webapp"
+              ["securedrop-api"]="api"
+              ["securedrop-scanner"]="scanner"
+              ["thingsboard"]="thingsboard"
+            )
+
             # IMAGE_MAP format: svc=namespace/svc:tag,svc2=namespace2/svc2:tag
             IFS=',' read -r -a entries <<< "${IMAGE_MAP}"
 
@@ -71,14 +82,25 @@ pipeline {
               img="${e#*=}"
               echo "Updating image for $svc -> $img"
 
-              if command -v yq >/dev/null 2>&1; then
-                # Replace by container name where possible
-                yq eval --inplace "(.spec.template.spec.containers[] | select(.name == env(svc))).image = env(img)" -e **/*.yaml || true
-                yq eval --inplace "(.spec.template.spec.containers[] | select(.name == env(svc))).image = env(img)" -e **/*.yml || true
-              else
-                # Fallback: replace occurrences of 'image: <something-containing-svc>' with new image
-                grep -RIl --exclude-dir=.git "image:.*${svc}" . | xargs -r sed -E -i "s#(image:\\s*).*${svc}[^\\n\\r]*#\\1${img}#g"
+              manifestFolder="${manifestFolders[$svc]:-}"
+              if [ -z "${manifestFolder}" ]; then
+                echo "No manifests folder mapping found for service: ${svc}"
+                continue
               fi
+
+              if [ ! -d "${manifestFolder}" ]; then
+                echo "Manifests folder not found: ${manifestFolder}"
+                continue
+              fi
+
+              # Update all image references in the mapped manifests folder
+              find "${manifestFolder}" -type f \( -name "*.yaml" -o -name "*.yml" \) | while read file; do
+                if grep -q "^[[:space:]]*image:[[:space:]]*" "$file"; then
+                  sed -E -i.bak "s#(^[[:space:]]*image:[[:space:]]*).*$#\\1${img}#" "$file"
+                  rm -f "${file}.bak"
+                  echo "  Updated: $file"
+                fi
+              done
             done
 
             # Commit only if changes
