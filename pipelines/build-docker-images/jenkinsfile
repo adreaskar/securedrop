@@ -201,7 +201,6 @@ pipeline {
                                     buildArgs << '--provenance false'
                                 }
 
-                                buildArgs << '--push'
                                 buildArgs << "-f \"${dockerfile}\""
 
                                 sh """
