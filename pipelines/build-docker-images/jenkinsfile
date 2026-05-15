@@ -1,26 +1,8 @@
 def serviceDefinitions = [
-    'securedrop': [
-        context: 'securedrop',
-        dockerfiles: ['Dockerfile.prod', 'Dockerfile'],
-        buildMode: 'buildx',
-        platforms: 'linux/amd64,linux/arm64',
-        provenance: false,
-    ],
-    'securedrop-api': [
-        context: 'securedrop-api',
-        dockerfiles: ['Dockerfile'],
-        buildMode: 'buildx',
-        platforms: 'linux/amd64,linux/arm64',
-        provenance: false
-    ],
+    'securedrop': [context: 'securedrop', dockerfiles: ['Dockerfile.prod', 'Dockerfile']],
+    'securedrop-api': [context: 'securedrop-api', dockerfiles: ['Dockerfile']],
     'securedrop-scanner': [context: 'securedrop-scanner', dockerfiles: ['Dockerfile']],
-    'node-red': [
-        context: 'node-red',
-        dockerfiles: ['Dockerfile.dev', 'Dockerfile'],
-        buildMode: 'buildx',
-        platforms: 'linux/amd64,linux/arm64',
-        provenance: false
-    ]
+    'node-red': [context: 'node-red', dockerfiles: ['Dockerfile.dev', 'Dockerfile']]
 ]
 
 pipeline {
@@ -168,7 +150,7 @@ pipeline {
 
                         for (String candidate in serviceConfig.dockerfiles) {
                             if (fileExists("${serviceConfig.context}/${candidate}")) {
-                                dockerfile = candidate
+                                dockerfile = "${serviceConfig.context}/${candidate}"
                                 break
                             }
                         }
@@ -184,46 +166,18 @@ pipeline {
                         echo "Image tags: ${tagList.join(', ')}"
 
                         if (!params.DRY_RUN) {
-                            if (serviceConfig.buildMode == 'buildx') {
-                                def buildArgs = []
+                            def buildTagArgs = imageTags.collect { tag -> "-t \"${imageName}:${tag}\"" }.join(' ')
 
-                                if (serviceConfig.platforms) {
-                                    buildArgs << "--platform ${serviceConfig.platforms}"
-                                }
+                            sh """
+                                docker build \
+                                    -f "${dockerfile}" \
+                                    ${buildTagArgs} \
+                                    "./${serviceConfig.context}"
+                            """
 
-                                buildArgs.addAll(imageTags.collect { tag -> "--tag \"${imageName}:${tag}\"" })
-
-                                if (serviceConfig.buildArgs) {
-                                    buildArgs.addAll(serviceConfig.buildArgs)
-                                }
-
-                                if (serviceConfig.provenance == false) {
-                                    buildArgs << '--provenance false'
-                                }
-
-                                buildArgs << "-f \"${dockerfile}\""
-
-                                sh """
-                                    cd "${serviceConfig.context}"
-                                    docker buildx build \
-                                        ${buildArgs.join(' ')} \
-                                        .
-                                """
-                            } else {
-                                def buildTagArgs = imageTags.collect { tag -> "-t \"${imageName}:${tag}\"" }.join(' ')
-
-                                sh """
-                                    docker build \
-                                        -f "${serviceConfig.context}/${dockerfile}" \
-                                        ${buildTagArgs} \
-                                        "./${serviceConfig.context}"
-                                """
-
-                                for (String tag in imageTags) {
-                                    sh "docker push \"${imageName}:${tag}\""
-                                }
+                            for (String tag in imageTags) {
+                                sh "docker push \"${imageName}:${tag}\""
                             }
-
                             // collect mapping for downstream job
                             if (!binding.hasVariable('imageMapEntries')) {
                                 imageMapEntries = []
