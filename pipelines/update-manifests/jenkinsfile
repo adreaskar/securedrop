@@ -96,7 +96,7 @@ pipeline {
               # Update all image references in the mapped manifests folder
               find "${manifestFolder}" -type f \\( -name "*.yaml" -o -name "*.yml" \\) | while read file; do
                 if grep -q "^[[:space:]]*image:[[:space:]]*" "$file"; then
-                  sed -E -i.bak "s#(^[[:space:]]*image:[[:space:]]*).*$#\\1${img}#" "$file"
+                  perl -0pi.bak -e 's#(^[[:space:]]*image:[[:space:]]*).*$#$1'"${img}"'#mg' "$file"
                   rm -f "${file}.bak"
                   echo "  Updated: $file"
                 fi
