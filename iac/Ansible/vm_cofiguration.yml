@@ -1,0 +1,73 @@
+- name: Security Baseline Setup for VM2
+  hosts: vm1
+  become: yes
+  
+  tasks:
+    #Εγκατάσταση UFW και Fail2ban
+    - name: Install UFW and Fail2ban
+      apt:
+        name: 
+          - ufw
+          - fail2ban
+        state: present
+        update_cache: yes
+
+    #Ρύθμιση Firewall (UFW)
+    - name: Allow SSH traffic on port 22
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Enable UFW and set default deny incoming
+      ufw:
+        state: enabled
+        default: deny
+        direction: incoming
+
+    #Ρύθμιση Fail2ban (Zero Tolerance)
+    - name: Configure Fail2ban for permanent ban on 3 attempts
+      copy:
+        dest: /etc/fail2ban/jail.local
+        content: |
+          [sshd]
+          enabled = true
+          port = 22
+          filter = sshd
+          logpath = /var/log/auth.log
+          maxretry = 3
+          bantime = -1
+      notify: Restart Fail2ban
+
+    - name: Ensure Fail2ban service is running
+      systemd:
+        name: fail2ban
+        state: started
+        enabled: yes
+
+    #Hardening του SSH (Κλείδωμα)
+    - name: Disable SSH Password Authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: Restart SSH
+
+    - name: Disable SSH Root Login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+      notify: Restart SSH
+
+  #Handlers:Τρέχουν στο τέλος ΜΟΝΟ αν έγινε αλλαγή
+  handlers:
+    - name: Restart SSH
+      systemd:
+        name: ssh
+        state: restarted
+
+    - name: Restart Fail2ban
+      systemd:
+        name: fail2ban
+        state: restarted

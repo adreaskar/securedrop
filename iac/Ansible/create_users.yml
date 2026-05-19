@@ -1,4 +1,3 @@
----
 - name: Create Users and Configure Sudo Access
   hosts: vm2
   become: yes

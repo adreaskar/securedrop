@@ -30,6 +30,7 @@ securedrop-scanner/node_modules/
 iac/Ansible/hosts.ini
 iac/Ansible/users_vars_DO_NOT_SHARE.yml
 iac/Ansible/vault_keys_DO_NOT_SHARE.json
+iac/Ansible/microk8s_users.yml
 
 iac/Opentofu/.terraform/
 iac/Opentofu/.terraform.lock.hcl
