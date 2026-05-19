@@ -3,6 +3,9 @@ kind: Job
 metadata:
   name: thingsboard-init-job
   namespace: default
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
 spec:
   ttlSecondsAfterFinished: 60
   template:
@@ -11,19 +14,19 @@ spec:
       initContainers:
         - name: wait-for-thingsboard
           image: busybox
-          command: 
+          command:
             - sh
             - -c
             - |
               echo "Waiting for ThingsBoard..."
-              until nc -z thingsboard 9090; do 
+              until nc -z thingsboard 9090; do
                 echo "Sleeping 5s..."
                 sleep 5
               done
       containers:
         - name: init-script
           image: python:3.12-slim
-          command: 
+          command:
             - sh
             - -c
             - "pip install requests && python /config/init_thingsboard.py"
