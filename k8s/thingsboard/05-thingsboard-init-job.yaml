@@ -9,7 +9,20 @@ metadata:
 spec:
   ttlSecondsAfterFinished: 60
   template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/role: "thingsboard-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/thingsboard"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/thingsboard" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
     spec:
+      serviceAccountName: thingsboard-sa
       restartPolicy: OnFailure
       initContainers:
         - name: wait-for-thingsboard
@@ -23,23 +36,47 @@ spec:
                 echo "Sleeping 5s..."
                 sleep 5
               done
+
       containers:
         - name: init-script
           image: python:3.12-slim
           command:
             - sh
             - -c
-            - "pip install requests && python /config/init_thingsboard.py"
+            - |
+              set -e
+
+              if [ ! -f /vault/secrets/config.env ]; then
+                echo "ERROR: Vault config not found"
+                exit 1
+              fi
+
+              . /vault/secrets/config.env
+
+              if [ -z "$TB_ADMIN_USER" ]; then
+                echo "ERROR: TB_ADMIN_USER is missing"
+                exit 1
+              fi
+
+              if [ -z "$TB_ADMIN_PASS" ]; then
+                echo "ERROR: TB_ADMIN_PASS is missing"
+                exit 1
+              fi
+
+              echo "Installing Python dependencies..."
+              pip install --no-cache-dir requests
+
+              echo "Running ThingsBoard init script..."
+              python /config/init_thingsboard.py
+
+              echo "ThingsBoard init job completed."
           env:
             - name: TB_URL
               value: "http://thingsboard:9090"
-            - name: TB_ADMIN_USER
-              value: "tenant@thingsboard.org"
-            - name: TB_ADMIN_PASS
-              value: "tenant"
           volumeMounts:
             - name: config-volume
               mountPath: /config
+
       volumes:
         - name: config-volume
           configMap:

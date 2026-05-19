@@ -1332,112 +1332,196 @@ data:
       "name": "SecureDrop"
     }
 
-  init_thingsboard.py: |
+    init_thingsboard.py: |
     import os
     import json
     import time
     import requests
     import sys
 
-    # Κάνουμε χρήση του Port 9090 (Default ThingsBoard HTTP)
     TB_URL = os.getenv("TB_URL", "http://thingsboard:9090")
-    USERNAME = os.getenv("TB_ADMIN_USER", "tenant@thingsboard.org")
-    PASSWORD = os.getenv("TB_ADMIN_PASS", "tenant")
-    DEVICE_NAME = "scanner"
-    DEVICE_TOKEN = "my_scanner_token"
+    USERNAME = os.getenv("TB_ADMIN_USER")
+    PASSWORD = os.getenv("TB_ADMIN_PASS")
+
+    DEVICE_NAME = os.getenv("TB_DEVICE_NAME", "scanner")
+    DEVICE_TOKEN = os.getenv("TB_DEVICE_TOKEN", "my_scanner_token")
     DASHBOARD_FILE = "/config/dashboard.json"
+
+    if not USERNAME or not PASSWORD:
+        print("ERROR: TB_ADMIN_USER or TB_ADMIN_PASS is missing from environment.")
+        sys.exit(1)
 
     def get_token():
         url = f"{TB_URL}/api/auth/login"
         try:
             print(f"Connecting to {url}...")
-            response = requests.post(url, json={"username": USERNAME, "password": PASSWORD}, timeout=5)
+            response = requests.post(
+                url,
+                json={"username": USERNAME, "password": PASSWORD},
+                timeout=10
+            )
+
             if response.status_code == 200:
                 return response.json()["token"]
+
+            print(f"Login failed: HTTP {response.status_code} - {response.text}")
             return None
         except Exception as e:
-            print(f"Connection Error: {e}")
+            print(f"Connection error: {e}")
             return None
 
     def create_or_update_device(token):
         headers = {"X-Authorization": f"Bearer {token}"}
-        
+
         print(f"Checking for device '{DEVICE_NAME}'...")
         check_url = f"{TB_URL}/api/tenant/devices?deviceName={DEVICE_NAME}"
-        resp = requests.get(check_url, headers=headers)
-        
+        resp = requests.get(check_url, headers=headers, timeout=10)
+
         device_id = None
 
         if resp.status_code == 200:
             print(f"Device '{DEVICE_NAME}' already exists.")
-            device_id = resp.json()['id']['id']
+            device_id = resp.json()["id"]["id"]
         else:
-            print(f"Creating '{DEVICE_NAME}'...")
+            print(f"Creating device '{DEVICE_NAME}'...")
             create_url = f"{TB_URL}/api/device"
-            create_resp = requests.post(create_url, json={"name": DEVICE_NAME, "type": "default"}, headers=headers)
-            
+            create_resp = requests.post(
+                create_url,
+                json={"name": DEVICE_NAME, "type": "default"},
+                headers=headers,
+                timeout=10
+            )
+
             if create_resp.status_code == 200:
-                device_id = create_resp.json()['id']['id']
+                device_id = create_resp.json()["id"]["id"]
                 print(f"Device created with ID: {device_id}")
-                
-                # Set Token
-                save_cred_url = f"{TB_URL}/api/device/credentials"
-                get_cred_url = f"{TB_URL}/api/device/{device_id}/credentials"
-                cred_resp = requests.get(get_cred_url, headers=headers)
-                if cred_resp.status_code == 200:
-                    creds = cred_resp.json()
-                    creds['credentialsType'] = 'ACCESS_TOKEN'
-                    creds['credentialsId'] = DEVICE_TOKEN
-                    requests.post(save_cred_url, json=creds, headers=headers)
-                    print("Access token updated.")
             else:
-                print(f"Failed to create device: {create_resp.text}")
+                print(f"Failed to create device: {create_resp.status_code} - {create_resp.text}")
                 return None
 
+        if device_id:
+            update_device_token(token, device_id)
+
         return device_id
+
+    def update_device_token(token, device_id):
+        headers = {"X-Authorization": f"Bearer {token}"}
+
+        get_cred_url = f"{TB_URL}/api/device/{device_id}/credentials"
+        save_cred_url = f"{TB_URL}/api/device/credentials"
+
+        cred_resp = requests.get(get_cred_url, headers=headers, timeout=10)
+
+        if cred_resp.status_code != 200:
+            print(f"Could not read device credentials: {cred_resp.status_code} - {cred_resp.text}")
+            return
+
+        creds = cred_resp.json()
+        current_token = creds.get("credentialsId")
+
+        if current_token == DEVICE_TOKEN:
+            print("Device token already correct.")
+            return
+
+        creds["credentialsType"] = "ACCESS_TOKEN"
+        creds["credentialsId"] = DEVICE_TOKEN
+
+        save_resp = requests.post(save_cred_url, json=creds, headers=headers, timeout=10)
+
+        if save_resp.status_code == 200:
+            print("Access token updated.")
+        else:
+            print(f"Could not update access token: {save_resp.status_code} - {save_resp.text}")
+
+    def find_dashboard_by_title(token, title):
+        headers = {"X-Authorization": f"Bearer {token}"}
+
+        page = 0
+        page_size = 100
+
+        while True:
+            url = f"{TB_URL}/api/tenant/dashboards?pageSize={page_size}&page={page}"
+            resp = requests.get(url, headers=headers, timeout=10)
+
+            if resp.status_code != 200:
+                print(f"Failed to list dashboards: {resp.status_code} - {resp.text}")
+                return None
+
+            payload = resp.json()
+            dashboards = payload.get("data", [])
+
+            for dashboard in dashboards:
+                if dashboard.get("title") == title:
+                    return dashboard
+
+            if not payload.get("hasNext"):
+                break
+
+            page += 1
+
+        return None
 
     def import_dashboard(token):
         if not os.path.exists(DASHBOARD_FILE):
             print("No dashboard file found.")
             return
 
-        print("Reading Dashboard JSON...")
-        with open(DASHBOARD_FILE, 'r') as f:
+        print("Reading dashboard JSON...")
+        with open(DASHBOARD_FILE, "r") as f:
             dashboard_json = json.load(f)
 
-        # Αφαιρούμε το ID του ίδιου του Dashboard (όχι της συσκευής) για να μην χτυπήσει σε duplicate
-        if 'id' in dashboard_json:
-            del dashboard_json['id']
+        dashboard_title = dashboard_json.get("title") or dashboard_json.get("name")
 
-        headers = {"X-Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        response = requests.post(f"{TB_URL}/api/dashboard", json=dashboard_json, headers=headers)
+        if not dashboard_title:
+            print("ERROR: Dashboard JSON has no title/name.")
+            return
+
+        existing_dashboard = find_dashboard_by_title(token, dashboard_title)
+
+        if existing_dashboard:
+            print(f"Dashboard '{dashboard_title}' already exists. Skipping create.")
+            return
+
+        if "id" in dashboard_json:
+            del dashboard_json["id"]
+
+        headers = {
+            "X-Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(
+            f"{TB_URL}/api/dashboard",
+            json=dashboard_json,
+            headers=headers,
+            timeout=20
+        )
+
         if response.status_code == 200:
-            print("Dashboard imported successfully.")
+            print(f"Dashboard '{dashboard_title}' imported successfully.")
         else:
-            print(f"Failed import: {response.text}")
+            print(f"Failed dashboard import: {response.status_code} - {response.text}")
 
     if __name__ == "__main__":
-        print("Starting Init Script...")
+        print("Starting ThingsBoard init script...")
+
         token = None
         start_time = time.time()
-        
-        # Loop αναμονής 5 λεπτών
+
         while time.time() - start_time < 300:
             token = get_token()
             if token:
-                print("ThingsBoard is UP!")
+                print("ThingsBoard is UP.")
                 break
             time.sleep(5)
 
-        if token:
-            # Δημιουργία συσκευής (ή εύρεση της)
-            new_dev_id = create_or_update_device(token)
-            
-            # Import dashboard (Χωρίς αλλαγή ID όπως ζητήθηκε)
-            if new_dev_id:
-                import_dashboard(token)
-            
-            print("Initialization complete.")
-        else:
+        if not token:
             print("Timeout waiting for ThingsBoard.")
             sys.exit(1)
+
+        device_id = create_or_update_device(token)
+
+        if device_id:
+            import_dashboard(token)
+
+        print("Initialization complete.")
