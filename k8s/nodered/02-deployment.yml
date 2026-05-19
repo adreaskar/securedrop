@@ -33,7 +33,7 @@ spec:
               mountPath: /data
       containers:
         - name: nodered
-          image: adreaskar/securedrop-nodered:2.0
+          image: securedropgr/securedrop-nodered:2.1
           command: ["/bin/sh", "-c"]
           args: [". /vault/secrets/config.env && ./node-red-start.sh"]
           resources:

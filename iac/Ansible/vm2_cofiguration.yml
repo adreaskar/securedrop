@@ -1,4 +1,3 @@
----
 - name: Security Baseline Setup for VM2
   hosts: vm2
   become: yes

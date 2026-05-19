@@ -38,8 +38,8 @@ spec:
       serviceAccountName: scanner-sa
       containers:
         - name: securedrop-scanner
-          image: securedrop-scanner:local
-          imagePullPolicy: Never
+          image: securedropgr/securedrop-scanner:1.0.0 
+          imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args: ["source /vault/secrets/config.env && node src/index.js"]
           resources:
