@@ -1332,7 +1332,7 @@ data:
       "name": "SecureDrop"
     }
 
-    init_thingsboard.py: |
+  init_thingsboard.py: |
     import os
     import json
     import time
