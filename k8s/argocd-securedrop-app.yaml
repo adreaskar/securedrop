@@ -12,7 +12,7 @@ spec:
     path: .
     directory:
       recurse: true
-      exclude: "{observability-values.yaml,helm-values/**,kustomization.yml}"
+      exclude: "{observability-values.yaml,helm-values/**,kustomization.yml,argocd-securedrop-app.yaml}"
 
   destination:
     server: https://kubernetes.default.svc
