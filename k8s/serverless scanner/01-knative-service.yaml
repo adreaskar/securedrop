@@ -25,7 +25,7 @@ spec:
           {{- end -}}
     spec:
       serviceAccountName: scanner-sa
-      containerConcurrency: 1
+      containerConcurrency: 5
       enableServiceLinks: false
       timeoutSeconds: 300
       containers:
