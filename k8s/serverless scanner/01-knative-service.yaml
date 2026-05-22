@@ -11,6 +11,8 @@ spec:
       annotations:
         autoscaling.knative.dev/min-scale: "0"
         autoscaling.knative.dev/max-scale: "3"
+        autoscaling.knative.dev/window: "10s"
+        autoscaling.knative.dev/scale-to-zero-pod-retention-period: "0s"
 
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "scanner-role"
