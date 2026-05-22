@@ -25,9 +25,10 @@ spec:
           {{- end -}}
     spec:
       serviceAccountName: scanner-sa
-      containerConcurrency: 0
+      containerConcurrency: 1
       enableServiceLinks: false
       timeoutSeconds: 300
+      terminationGracePeriodSeconds: 10
       containers:
         - name: securedrop-scanner
           image: securedropgr/securedrop-scanner:test-faas
