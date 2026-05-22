@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-gc
+  namespace: knative-serving
+data:
+  retain-since-create-time: "1h"
+  retain-since-last-active-time: "1h"
+  min-non-active-revisions: "1"
+  max-non-active-revisions: "2"

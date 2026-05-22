@@ -4,3 +4,4 @@ resources:
 patches:
   - path: patches/config-network.yaml
   - path: patches/config-domain.yaml
+  - path: patches/config-gc.yaml
