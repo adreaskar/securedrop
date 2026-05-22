@@ -23,6 +23,9 @@ spec:
           {{- end -}}
     spec:
       serviceAccountName: scanner-sa
+      containerConcurrency: 0
+      enableServiceLinks: false
+      timeoutSeconds: 300
       containers:
         - name: securedrop-scanner
           image: securedropgr/securedrop-scanner:test-faas
@@ -39,6 +42,7 @@ spec:
               exec node src/index.js
           ports:
             - containerPort: 8080
+              protocol: TCP
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -54,5 +58,8 @@ spec:
               cpu: "100m"
               memory: "256Mi"
             limits:
-              cpu: "1000m"
+              cpu: "1"
               memory: "1Gi"
+  traffic:
+    - latestRevision: true
+      percent: 100
