@@ -30,7 +30,7 @@ spec:
       timeoutSeconds: 300
       containers:
         - name: securedrop-scanner
-          image: securedropgr/securedrop-scanner:test-faas
+          image: securedropgr/securedrop-scanner:2.1
           command:
             - /bin/sh
             - -c
