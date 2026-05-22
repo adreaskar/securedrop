@@ -40,6 +40,10 @@ function decodeObjectKey(rawKey) {
   return decodeURIComponent(String(rawKey).replace(/\+/g, " "));
 }
 
+function toSizeMB(sizeBytes) {
+  return Number((Number(sizeBytes || 0) / (1024 * 1024)).toFixed(2));
+}
+
 function extractInfoFromMinioEvent(event) {
   console.log("RAW MINIO EVENT:", JSON.stringify(event));
 
@@ -51,6 +55,7 @@ function extractInfoFromMinioEvent(event) {
 
   const bucket = record.s3.bucket?.name || SOURCE_BUCKET;
   const objectKey = decodeObjectKey(record.s3.object.key);
+  const size = Number(record.s3.object.size || 0);
 
   const parts = objectKey.split("/");
   const fileId = parts.length >= 2 ? parts[1] : null;
@@ -59,7 +64,7 @@ function extractInfoFromMinioEvent(event) {
     throw new Error(`Cannot extract fileId from objectKey=${objectKey}`);
   }
 
-  return { bucket, objectKey, fileId };
+  return { bucket, objectKey, fileId, size };
 }
 
 function extractInfoFromRequest(body) {
@@ -70,6 +75,16 @@ function extractInfoFromRequest(body) {
   const bucket = body.bucket || SOURCE_BUCKET;
   const objectKey = body.objectKey || body.key;
   const fileId = body.fileId;
+
+  const size = Number(
+    body.file_size_bytes ??
+    body.fileSizeBytes ??
+    body.fileSize ??
+    body.file_size ??
+    body.size ??
+    body.objectSize ??
+    0
+  );
 
   if (!objectKey) {
     throw new Error("Missing objectKey");
@@ -82,7 +97,8 @@ function extractInfoFromRequest(body) {
   return {
     bucket,
     objectKey: decodeObjectKey(objectKey),
-    fileId
+    fileId,
+    size
   };
 }
 
@@ -152,7 +168,7 @@ async function updateStatus(fileId, status, result) {
   });
 }
 
-async function processScan({ bucket, objectKey, fileId }) {
+async function processScan({ bucket, objectKey, fileId, size = 0 }) {
   const startedAt = Date.now();
 
   console.log(`Scanning: ${bucket}/${objectKey}`);
@@ -181,7 +197,11 @@ async function processScan({ bucket, objectKey, fileId }) {
     status,
     clean: scan.clean,
     scanResult: scan.result,
-    scan_duration_ms: Date.now() - startedAt
+    scan_duration_ms: Date.now() - startedAt,
+
+    // Telemetry for ThingsBoard
+    file_size_bytes: Number(size || 0),
+    file_size_mb: toSizeMB(size)
   };
 }
 
