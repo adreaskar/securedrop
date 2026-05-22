@@ -1,0 +1,5 @@
+resources:
+  - 02-kourier.yaml
+
+patches:
+  - path: patches/kourier-clusterip.yaml

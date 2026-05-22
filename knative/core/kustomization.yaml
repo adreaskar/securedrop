@@ -1,0 +1,6 @@
+resources:
+  - 01-serving-core.yaml
+
+patches:
+  - path: patches/config-network.yaml
+  - path: patches/config-domain.yaml
