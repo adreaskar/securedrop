@@ -35,7 +35,6 @@ spec:
       containers:
         - name: nodered
           image: securedropgr/securedrop-nodered:2.2
-          imaagePullPolicy: always
           resources:
             requests:
               memory: "128Mi"
