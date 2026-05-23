@@ -5,7 +5,7 @@ Installed version:
 - Knative Serving: knative-v1.22.0
 - net-kourier: knative-v1.22.0
 
-This folder stores the platform configuration as code.
+This folder stores the knative platform configuration as code.
 
 ## Install on a new cluster
 
