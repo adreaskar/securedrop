@@ -1,0 +1,5 @@
+admin_users:
+  - username: user1
+    pub_key: "public ssh key here"
+  - username: user2
+    pub_key: "public ssh key here"

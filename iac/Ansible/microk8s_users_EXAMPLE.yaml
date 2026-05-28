@@ -1,0 +1,5 @@
+microk8s_users:
+  - user1
+  - user2
+
+traefik_external_ip: "external vm ip address here"

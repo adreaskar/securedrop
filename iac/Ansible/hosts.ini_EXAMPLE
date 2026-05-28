@@ -1,0 +1,5 @@
+[vm1]
+IP ansible_user=USER ansible_ssh_private_key_file=~/.ssh/KEY
+
+[vm1=2]
+IP2 ansible_user=USER ansible_ssh_private_key_file=~/.ssh/KEY2

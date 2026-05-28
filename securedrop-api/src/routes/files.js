@@ -1,6 +1,8 @@
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const multer = require("multer");
+const crypto = require("crypto");
+
 const verifyToken = require("../middleware/auth");
 const minioService = require("../services/minio");
 const db = require("../services/database");
@@ -8,15 +10,51 @@ const config = require("../config");
 
 const router = express.Router();
 
-// Configure multer for memory storage
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: config.maxFileSize, // 50MB default
+    fileSize: config.maxFileSize,
   },
 });
 
-// POST /api/files/upload - Upload file directly to backend
+function sha256(buffer) {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+function getBucketForStatus(status) {
+  switch (status) {
+    case "approved":
+      return config.minio.buckets.approved;
+    case "rejected":
+      return config.minio.buckets.rejected;
+    case "quarantine":
+    case "scanning":
+    default:
+      return config.minio.buckets.quarantine;
+  }
+}
+
+function formatFileTransfer(file) {
+  return {
+    id: file.file_id,
+    fileName: file.file_name,
+    fileSize: file.file_size,
+    fileType: file.file_type,
+    recipientEmail: file.recipient_email,
+    message: file.message,
+    status: file.status,
+    createdAt: file.created_at,
+    updatedAt: file.updated_at,
+    scannedAt: file.scanned_at,
+    approvedAt: file.approved_at,
+    senderId: file.sender_id,
+    senderEmail: file.sender_email,
+    cachedScan: file.cached_scan || false,
+    cachedFromFileId: file.cached_from_file_id || null,
+  };
+}
+
+// POST /api/files/upload
 router.post("/upload", verifyToken, upload.single("file"), async (req, res) => {
   try {
     const file = req.file;
@@ -30,20 +68,24 @@ router.post("/upload", verifyToken, upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "recipientEmail is required" });
     }
 
-    // Generate unique file ID
     const fileId = uuidv4();
     const objectName = `${req.user.id}/${fileId}/${file.originalname}`;
 
-    // Upload file to MinIO quarantine bucket
+    const fileHash = sha256(file.buffer);
+    const previousScan = await db.getCompletedScanByHash(fileHash);
+
+    const cachedScan = Boolean(previousScan);
+    const initialStatus = cachedScan ? previousScan.status : "quarantine";
+    const targetBucket = getBucketForStatus(initialStatus);
+
     await minioService.uploadFile(
-      config.minio.buckets.quarantine,
+      targetBucket,
       objectName,
       file.buffer,
       file.size,
       file.mimetype
     );
 
-    // Create file transfer record
     const fileTransfer = await db.createFileTransfer({
       fileId,
       fileName: file.originalname,
@@ -54,12 +96,16 @@ router.post("/upload", verifyToken, upload.single("file"), async (req, res) => {
       senderEmail: req.user.email,
       recipientEmail: recipientEmail.toLowerCase().trim(),
       message,
+      fileHash,
+      status: initialStatus,
+      scanResult: cachedScan
+        ? previousScan.scan_result || "Reused previous scan result by SHA-256 hash"
+        : null,
+      cachedScan,
+      cachedFromFileId: cachedScan ? previousScan.file_id : null,
     });
 
-    // TODO: Trigger virus scan (ClamAV)
-    // await triggerVirusScan(fileId);
-
-    res.status(201).json({
+    return res.status(201).json({
       id: fileTransfer.id,
       fileId: fileTransfer.file_id,
       fileName: fileTransfer.file_name,
@@ -69,83 +115,57 @@ router.post("/upload", verifyToken, upload.single("file"), async (req, res) => {
       message: fileTransfer.message,
       status: fileTransfer.status,
       createdAt: fileTransfer.created_at,
+      updatedAt: fileTransfer.updated_at,
+      scannedAt: fileTransfer.scanned_at,
+      approvedAt: fileTransfer.approved_at,
       senderId: fileTransfer.sender_id,
       senderEmail: fileTransfer.sender_email,
+      cachedScan: fileTransfer.cached_scan,
+      cachedFromFileId: fileTransfer.cached_from_file_id,
     });
   } catch (error) {
     console.error("Error uploading file:", error);
-    res.status(500).json({ error: "Failed to upload file" });
+    return res.status(500).json({ error: "Failed to upload file" });
   }
 });
 
-// GET /api/files/sent - Get user's sent files
+// GET /api/files/sent
 router.get("/sent", verifyToken, async (req, res) => {
   try {
     const files = await db.getSentFiles(req.user.id);
-
-    const formattedFiles = files.map((file) => ({
-      id: file.file_id,
-      fileName: file.file_name,
-      fileSize: file.file_size,
-      fileType: file.file_type,
-      recipientEmail: file.recipient_email,
-      message: file.message,
-      status: file.status,
-      createdAt: file.created_at,
-      senderId: file.sender_id,
-      senderEmail: file.sender_email,
-    }));
-
-    res.json(formattedFiles);
+    return res.json(files.map(formatFileTransfer));
   } catch (error) {
     console.error("Error fetching sent files:", error);
-    res.status(500).json({ error: "Failed to fetch sent files" });
+    return res.status(500).json({ error: "Failed to fetch sent files" });
   }
 });
 
-// GET /api/files/received - Get user's received files
+// GET /api/files/received
 router.get("/received", verifyToken, async (req, res) => {
   try {
     const files = await db.getReceivedFiles(req.user.email);
-
-    const formattedFiles = files.map((file) => ({
-      id: file.file_id,
-      fileName: file.file_name,
-      fileSize: file.file_size,
-      fileType: file.file_type,
-      recipientEmail: file.recipient_email,
-      message: file.message,
-      status: file.status,
-      createdAt: file.created_at,
-      senderId: file.sender_id,
-      senderEmail: file.sender_email,
-    }));
-
-    res.json(formattedFiles);
+    return res.json(files.map(formatFileTransfer));
   } catch (error) {
     console.error("Error fetching received files:", error);
-    res.status(500).json({ error: "Failed to fetch received files" });
+    return res.status(500).json({ error: "Failed to fetch received files" });
   }
 });
 
-// GET /api/files/:fileId/download - Download file
+// GET /api/files/:fileId/download
 router.get("/:fileId/download", verifyToken, async (req, res) => {
   try {
     const { fileId } = req.params;
 
-    // Get file transfer record
     const fileTransfer = await db.getFileTransferById(fileId);
 
     if (!fileTransfer) {
       return res.status(404).json({ error: "File not found" });
     }
 
-    // Verify user is the recipient
     if (fileTransfer.recipient_email !== req.user.email) {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    // Verify file is approved
     if (fileTransfer.status !== "approved") {
       return res.status(403).json({
         error: "File is not available for download",
@@ -153,13 +173,11 @@ router.get("/:fileId/download", verifyToken, async (req, res) => {
       });
     }
 
-    // Stream file from MinIO
     const stream = await minioService.downloadFile(
       config.minio.buckets.approved,
       fileTransfer.object_name
     );
 
-    // Set headers for file download
     res.setHeader("Content-Type", fileTransfer.file_type);
     res.setHeader(
       "Content-Disposition",
@@ -167,70 +185,50 @@ router.get("/:fileId/download", verifyToken, async (req, res) => {
     );
     res.setHeader("Content-Length", fileTransfer.file_size);
 
-    // Pipe the stream to response
-    stream.pipe(res);
+    return stream.pipe(res);
   } catch (error) {
     console.error("Error downloading file:", error);
-    res.status(500).json({ error: "Failed to download file" });
+    return res.status(500).json({ error: "Failed to download file" });
   }
 });
 
-// DELETE /api/files/:fileId - Delete a sent file
+// DELETE /api/files/:fileId
 router.delete("/:fileId", verifyToken, async (req, res) => {
   try {
     const { fileId } = req.params;
 
-    // Get file transfer record
     const fileTransfer = await db.getFileTransferById(fileId);
 
     if (!fileTransfer) {
       return res.status(404).json({ error: "File not found" });
     }
 
-    // Verify user is the sender
     if (fileTransfer.sender_id !== req.user.id) {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    // Determine which bucket the file is in based on status
-    let bucket;
-    switch (fileTransfer.status) {
-      case "quarantine":
-      case "scanning":
-        bucket = config.minio.buckets.quarantine;
-        break;
-      case "approved":
-        bucket = config.minio.buckets.approved;
-        break;
-      case "rejected":
-        bucket = config.minio.buckets.rejected;
-        break;
-      default:
-        bucket = config.minio.buckets.quarantine;
-    }
+    const bucket = getBucketForStatus(fileTransfer.status);
 
-    // Delete file from MinIO
     await minioService.deleteFile(bucket, fileTransfer.object_name);
 
-    // Delete database record
     const deletedRecord = await db.deleteFileTransfer(fileId, req.user.id);
 
     if (!deletedRecord) {
       return res.status(500).json({ error: "Failed to delete file record" });
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: "File deleted successfully",
-      fileId: fileId,
+      fileId,
     });
   } catch (error) {
     console.error("Error deleting file:", error);
-    res.status(500).json({ error: "Failed to delete file" });
+    return res.status(500).json({ error: "Failed to delete file" });
   }
 });
 
-// POST /api/files/changeStatus - Update file status (for external virus scanner)
+// POST /api/files/changeStatus
 router.post("/changeStatus", async (req, res) => {
   try {
     const { fileId, status, scanResult } = req.body;
@@ -239,46 +237,49 @@ router.post("/changeStatus", async (req, res) => {
       `Received status change for fileId: ${fileId}, status: ${status}`
     );
 
-    // Validate status
     const validStatuses = ["quarantine", "approved", "rejected"];
+
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({
         error: "Invalid status. Must be one of: quarantine, approved, rejected",
       });
     }
 
-    // Get file transfer record
     const fileTransfer = await db.getFileTransferById(fileId);
 
     if (!fileTransfer) {
       return res.status(404).json({ error: "File not found" });
     }
 
-    if (status === "approved") {
-      destBucket = config.minio.buckets.approved;
-    } else if (status === "rejected") {
-      destBucket = config.minio.buckets.rejected;
+    const updatedFileTransfer = await db.updateFileStatus(
+      fileId,
+      status,
+      scanResult || null
+    );
+
+    if (!updatedFileTransfer) {
+      return res.status(404).json({ error: "File not found after update" });
     }
 
-    // Update database status
-    const updatedFileTransfer = await db.updateFileStatus(fileId, status);
-
-    res.json({
+    return res.json({
       success: true,
       message: "File status updated successfully",
-      fileId: fileId,
-      status: status,
+      fileId,
+      status,
       scanResult: scanResult || null,
       file: {
         id: updatedFileTransfer.file_id,
         fileName: updatedFileTransfer.file_name,
         status: updatedFileTransfer.status,
         updatedAt: updatedFileTransfer.updated_at,
+        scannedAt: updatedFileTransfer.scanned_at,
+        approvedAt: updatedFileTransfer.approved_at,
+        cachedScan: updatedFileTransfer.cached_scan,
       },
     });
   } catch (error) {
     console.error("Error updating file status:", error);
-    res.status(500).json({ error: "Failed to update file status" });
+    return res.status(500).json({ error: "Failed to update file status" });
   }
 });
 

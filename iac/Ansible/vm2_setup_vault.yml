@@ -1,4 +1,3 @@
----
 - name: Configure, Initialize and Unseal HashiCorp Vault
   hosts: vm2
   become: yes
