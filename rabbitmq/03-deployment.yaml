@@ -39,7 +39,11 @@ spec:
           image: rabbitmq:3.12-management
           command: ["/bin/bash", "-c"]
           args:
-            [". /vault/secrets/config.env && sleep 5 && exec rabbitmq-server"]
+            - |
+              . /vault/secrets/config.env
+              sleep 5
+              exec rabbitmq-server
+
           resources:
             requests:
               memory: "256Mi"
@@ -47,19 +51,31 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+
           ports:
             - containerPort: 5672
             - containerPort: 15672
-          livenessProbe:
-            tcpSocket:
-              port: 5672
-            initialDelaySeconds: 60
-            periodSeconds: 20
-          readinessProbe:
+
+          startupProbe:
             tcpSocket:
               port: 5672
             initialDelaySeconds: 20
             periodSeconds: 10
+            failureThreshold: 30
+
+          readinessProbe:
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
+
+          livenessProbe:
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 180
+            periodSeconds: 20
+            failureThreshold: 6
 
           volumeMounts:
             - name: data
@@ -70,6 +86,7 @@ spec:
             - name: topology-vol
               mountPath: /etc/rabbitmq/conf.d/10-custom.conf
               subPath: 10-custom.conf
+
       volumes:
         - name: data
           persistentVolumeClaim:

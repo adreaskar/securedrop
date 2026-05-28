@@ -23,6 +23,7 @@ spec:
           {{- end -}}
     spec:
       serviceAccountName: nodered-sa
+      
 
       initContainers:
         - name: fix-permissions
@@ -33,9 +34,7 @@ spec:
               mountPath: /data
       containers:
         - name: nodered
-          image: adreaskar/securedrop-nodered:2.0
-          command: ["/bin/sh", "-c"]
-          args: [". /vault/secrets/config.env && ./node-red-start.sh"]
+          image: securedropgr/securedrop-nodered:2.2
           resources:
             requests:
               memory: "128Mi"
@@ -44,7 +43,7 @@ spec:
               memory: "384Mi"
               cpu: "500m"
           ports:
-            - containerPort: 1880
+            - containerPort: 1880 
           volumeMounts:
             - name: data
               mountPath: /data

@@ -4,48 +4,35 @@ metadata:
   name: thingsboard
 spec:
   replicas: 1
-  selector: { matchLabels: { app: thingsboard } }
+  selector:
+    matchLabels:
+      app: thingsboard
   template:
-    metadata: { labels: { app: thingsboard } }
+    metadata:
+      labels:
+        app: thingsboard
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "thingsboard-role"
+        vault.hashicorp.com/agent-inject-secret-config.env: "secret/data/securedrop/thingsboard"
+        vault.hashicorp.com/agent-inject-template-config.env: |
+          {{- with secret "secret/data/securedrop/thingsboard" -}}
+          {{- range $k, $v := .Data.data }}
+          export {{ $k }}="{{ $v }}"
+          {{- end }}
+          {{- end -}}
     spec:
+      serviceAccountName: thingsboard-sa
       containers:
         - name: thingsboard
           image: thingsboard/tb-postgres:3.8.1
-          resources:
-            requests:
-              memory: "1200Mi"
-              cpu: "250m"
-            limits:
-              memory: "2500Mi"
-              cpu: "1500m"
-          env:
-            - name: TB_QUEUE_TYPE
-              value: "in-memory"
-            #- name: TB_QUEUE_RABBIT_MQ_USERNAME
-            #  valueFrom:
-            #    secretKeyRef:
-            #      name: securedrop-secrets
-            #      key: TB_QUEUE_RABBIT_MQ_USERNAME
-            #- name: TB_QUEUE_RABBIT_MQ_PASSWORD
-            #  valueFrom:
-            #    secretKeyRef:
-            #      name: securedrop-secrets
-            #      key: TB_QUEUE_RABBIT_MQ_PASSWORD
-            #- name: TB_QUEUE_TYPE
-            #  valueFrom:
-            #    secretKeyRef:
-            #      name: securedrop-secrets
-            #      key: TB_QUEUE_TYPE
-            #- name: TB_QUEUE_RABBIT_MQ_HOST
-            #  valueFrom:
-            #    secretKeyRef:
-            #      name: securedrop-secrets
-            #      key: TB_QUEUE_RABBIT_MQ_HOST
-            #- name: TB_QUEUE_RABBIT_MQ_PORT
-            #  valueFrom:
-            #    secretKeyRef:
-            #      name: securedrop-secrets
-            #      key: TB_QUEUE_RABBIT_MQ_PORT
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              if [ -f /vault/secrets/config.env ]; then
+                . /vault/secrets/config.env
+              fi
+              exec /usr/bin/start-tb.sh
           ports:
             - containerPort: 9090
             - containerPort: 1883
