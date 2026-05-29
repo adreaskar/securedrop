@@ -25,7 +25,7 @@ dist-ssr
 *.sw?
 
 # Scanner worker
-securedrop-scanner/node_modules/
+stateless-scanner/node_modules/
 
 
 # Infrastructure as Code
