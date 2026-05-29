@@ -1,8 +1,8 @@
 // Map root-level service folders that have Dockerfiles
 // These are the folders where docker builds will be triggered on changes
 def rootServices = [
-    'api'    : [dockerfiles: ['Dockerfile']],
-    'webapp' : [dockerfiles: ['Dockerfile', 'Dockerfile.prod']],
+    'api': [dockerfiles: ['Dockerfile']],
+    'webapp': [dockerfiles: ['Dockerfile', 'Dockerfile.prod']],
     'nodered': [dockerfiles: ['Dockerfile.dev', 'Dockerfile']],
     'scanner': [dockerfiles: ['Dockerfile']]
 ]
@@ -27,56 +27,38 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
-        JENKINS_CI_EMAIL      = 'jenkins@securedrop.local'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
                 script {
-                    env.GIT_BRANCH_NAME   = 'master'
-                    env.GIT_COMMIT        = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                    env.GIT_COMMIT_SHORT  = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
-                    env.IMAGE_TAG         = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
-                    env.SKIP_PIPELINE     = 'false'
+                    env.GIT_BRANCH_NAME = 'master'
+                    env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
 
                     echo "Branch: ${env.GIT_BRANCH_NAME}"
                     echo "Commit: ${env.GIT_COMMIT}"
+                    echo "Commit Short: ${env.GIT_COMMIT_SHORT}"
                     echo "Image Tag: ${env.IMAGE_TAG}"
+                    
+                    echo "Pipeline running on branch: ${env.GIT_BRANCH_NAME}"
                 }
             }
         }
 
         stage('Detect Changes') {
+            when {
+                expression { env.SKIP_PIPELINE != 'true' }
+            }
             steps {
                 script {
-
-                    // -------------------------------------------------------
-                    // Guard: skip builds triggered by Jenkins' own k8s commits
-                    // -------------------------------------------------------
-                    def lastCommitEmail = sh(
-                        script: 'git log -1 --format="%ae"',
-                        returnStdout: true
-                    ).trim()
-
-                    echo "Last commit author email: ${lastCommitEmail}"
-
-                    if (lastCommitEmail == env.JENKINS_CI_EMAIL) {
-                        env.SKIP_PIPELINE = 'true'
-                        currentBuild.description = 'Skipped: Jenkins CI auto-commit'
-                        echo 'Build triggered by Jenkins CI commit. Skipping pipeline.'
-                        return
-                    }
-
-                    // -------------------------------------------------------
-                    // Detect changed files
-                    // -------------------------------------------------------
-                    def changedFiles       = []
-                    def servicesToBuild    = [] as Set
-                    def k8sChanges         = false
-                    def rootServiceChanges = false
+                    def changedFiles = []
+                    def servicesToBuild = [] as Set
+                    def k8sChangesDetected = false
+                    def rootServiceChangesDetected = false
 
                     try {
                         def previousCommit = sh(script: 'git rev-parse HEAD~1', returnStdout: true).trim()
@@ -85,9 +67,9 @@ pipeline {
                             returnStdout: true
                         ).trim().split('\n').findAll { it }
                     } catch (Exception e) {
-                        echo "Could not get previous commit (first build?). Listing all tracked files."
+                        echo "Could not get previous commit (first build?). Will process all changes."
                         changedFiles = sh(
-                            script: "git ls-files",
+                            script: "git diff --name-only HEAD~ HEAD || git ls-files",
                             returnStdout: true
                         ).trim().split('\n').findAll { it }
                     }
@@ -101,28 +83,32 @@ pipeline {
 
                     echo "Changed files:\n${changedFiles.join('\n')}"
 
+                    // Analyze changed files
                     for (String filePath in changedFiles) {
                         def topLevel = filePath.contains('/') ? filePath.split('/')[0] : filePath
 
+                        // Check if change is in k8s directory
                         if (topLevel == 'k8s') {
-                            k8sChanges = true
-                            echo "K8s change detected: ${filePath}"
+                            k8sChangesDetected = true
+                            echo "K8s directory change detected: ${filePath}"
                         }
 
+                        // Check if change is in a root service folder with Dockerfile
                         if (rootServices.containsKey(topLevel)) {
                             servicesToBuild << topLevel
-                            rootServiceChanges = true
-                            echo "Service change detected: ${topLevel}"
+                            rootServiceChangesDetected = true
+                            echo "Root service change detected in: ${topLevel}"
                         }
                     }
 
-                    env.K8S_CHANGES         = k8sChanges ? 'true' : 'false'
-                    env.ROOT_SERVICE_CHANGES = rootServiceChanges ? 'true' : 'false'
-                    env.SERVICES_TO_BUILD   = servicesToBuild.join(',')
+                    // Store results in environment
+                    env.K8S_CHANGES = k8sChangesDetected ? 'true' : 'false'
+                    env.ROOT_SERVICE_CHANGES = rootServiceChangesDetected ? 'true' : 'false'
+                    env.SERVICES_TO_BUILD = servicesToBuild.join(',')
 
                     echo "\n=== Change Detection Summary ==="
-                    echo "K8s changes:      ${env.K8S_CHANGES}"
-                    echo "Service changes:  ${env.ROOT_SERVICE_CHANGES}"
+                    echo "K8s changes detected: ${env.K8S_CHANGES}"
+                    echo "Root service changes: ${env.ROOT_SERVICE_CHANGES}"
                     echo "Services to build: ${env.SERVICES_TO_BUILD ?: 'none'}"
                     echo "================================\n"
                 }
@@ -131,27 +117,25 @@ pipeline {
 
         stage('Build and Push Images') {
             when {
-                expression {
-                    env.SKIP_PIPELINE != 'true' && env.ROOT_SERVICE_CHANGES == 'true'
-                }
+                expression { env.ROOT_SERVICE_CHANGES == 'true' }
             }
             steps {
                 script {
                     def servicesToBuild = env.SERVICES_TO_BUILD.split(',').collect { it.trim() }.findAll { it }
-
-                    echo "Building ${servicesToBuild.size()} service(s) — tag: ${env.IMAGE_TAG}"
+                    
+                    echo "Building ${servicesToBuild.size()} services with tag: ${env.IMAGE_TAG}"
 
                     if (params.DRY_RUN) {
-                        echo 'DRY RUN: no images will be built or pushed.'
+                        echo 'DRY RUN: No images will be built or pushed.'
                     } else {
                         sh 'echo "$DOCKERHUB_CREDENTIALS_PSW" | docker login -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin'
                     }
 
                     for (String serviceName in servicesToBuild) {
                         def serviceConfig = rootServices[serviceName]
-                        def dockerfile    = null
+                        def dockerfile = null
 
-                        // Pick the first Dockerfile that exists for this service
+                        // Find the first available Dockerfile
                         for (String candidate in serviceConfig.dockerfiles) {
                             def dockerfilePath = "${serviceName}/${candidate}"
                             if (fileExists(dockerfilePath)) {
@@ -164,12 +148,12 @@ pipeline {
                             error("No Dockerfile found for service: ${serviceName}")
                         }
 
-                        def imageName    = "${DOCKERHUB_CREDENTIALS_USR}/${serviceName}"
+                        def imageName = "${DOCKERHUB_CREDENTIALS_USR}/${serviceName}"
                         def fullImageTag = "${imageName}:${env.IMAGE_TAG}"
 
                         echo "\n=== Building ${serviceName} ==="
                         echo "Dockerfile: ${dockerfile}"
-                        echo "Image tag:  ${fullImageTag}"
+                        echo "Image tag: ${fullImageTag}"
 
                         if (!params.DRY_RUN) {
                             sh """
@@ -178,8 +162,9 @@ pipeline {
                                     -t "${fullImageTag}" \
                                     "./${serviceName}"
                             """
+
                             sh "docker push \"${fullImageTag}\""
-                            echo "✓ Pushed: ${fullImageTag}"
+                            echo "✓ Successfully pushed: ${fullImageTag}"
                         }
                     }
 
@@ -190,83 +175,83 @@ pipeline {
             }
         }
 
-        stage('Update k8s Manifests') {
+        stage('Update k8s directories') {
             when {
-                expression {
-                    env.SKIP_PIPELINE != 'true' && env.ROOT_SERVICE_CHANGES == 'true'
-                }
+                expression { env.ROOT_SERVICE_CHANGES == 'true' }
             }
             steps {
                 script {
                     def servicesToBuild = env.SERVICES_TO_BUILD.split(',').collect { it.trim() }.findAll { it }
-
-                    echo "Updating k8s manifests for: ${servicesToBuild.join(', ')}"
+                    
+                    echo "Updating k8s manifests for built services..."
 
                     for (String serviceName in servicesToBuild) {
                         def k8sServiceDir = "k8s/${serviceName}"
-
+                        def deploymentImagePattern = serviceName == 'nodered' ? 'securedrop-nodered' : serviceName
+                        
                         if (!fileExists(k8sServiceDir)) {
                             echo "⚠ Warning: k8s directory not found for ${serviceName}: ${k8sServiceDir}"
                             continue
                         }
 
-                        echo "\nUpdating manifests in: ${k8sServiceDir}"
+                        echo "\nUpdating deployment manifests in: ${k8sServiceDir}"
 
-                        def yamlFiles = sh(
-                            script: "find ${k8sServiceDir} -name '*.yaml' -o -name '*.yml'",
+                        // Find deployment manifests only in the service k8s directory
+                        def deploymentFiles = sh(
+                               script: "find ${k8sServiceDir} -type f \\( -name '*deployment*.yaml' -o -name '*deployment*.yml' \\)",
                             returnStdout: true
                         ).trim().split('\n').findAll { it }
 
-                        def imageName    = "${DOCKERHUB_CREDENTIALS_USR}/${serviceName}"
-                        def newImageTag  = "${imageName}:${env.IMAGE_TAG}"
+                        def imageName = "${DOCKERHUB_CREDENTIALS_USR}/${serviceName}"
+                        def newImageTag = "${imageName}:${env.IMAGE_TAG}"
 
-                        for (String yamlFile in yamlFiles) {
-                            if (!yamlFile) continue
-                            echo "  → ${yamlFile}"
+                        for (String deploymentFile in deploymentFiles) {
+                            if (!deploymentFile) continue
+                            
+                            echo "Updating image tag in deployment file: ${deploymentFile}"
+                            
+                            // Update the image line in deployment files only
                             sh """
-                                sed -i -e 's|image: ${imageName}:[^ ]*|image: ${newImageTag}|g' "${yamlFile}" || true
+                                sed -i -E 's|^([[:space:]]*image:[[:space:]]*)[^[:space:]]*${deploymentImagePattern}:[^[:space:]]+|\1${newImageTag}|' "${deploymentFile}" || true
                             """
                         }
                     }
 
-                    // Commit and push — [skip ci] prevents this push
-                    // from triggering a new meaningful pipeline run
-                    echo "\nCommitting k8s manifest updates..."
+                    echo "\n✓ Manifests updated successfully"
+
+                    // Commit and push changes to master branch
+                    echo "\nCommitting k8s manifest updates to repository..."
                     sh """
-                        git config user.email "${env.JENKINS_CI_EMAIL}"
+                        git config user.email "jenkins@securedrop.local"
                         git config user.name "Jenkins CI"
                         git add k8s/
                         if ! git diff --cached --quiet; then
-                            git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER} [skip ci]"
+                            git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER}"
                             git push origin HEAD:master
-                            echo "✓ Manifests committed and pushed"
                         else
-                            echo "No manifest changes to commit"
+                            echo "No k8s manifest changes to commit"
                         fi
                     """
+                    echo "✓ Changes committed and pushed successfully"
                 }
             }
         }
 
         stage('Trigger Update Manifests Pipeline') {
             when {
-                expression {
-                    env.SKIP_PIPELINE != 'true' &&
-                    (env.ROOT_SERVICE_CHANGES == 'true' || env.K8S_CHANGES == 'true')
-                }
+                expression { env.ROOT_SERVICE_CHANGES == 'true' || env.K8S_CHANGES == 'true' }
             }
             steps {
                 script {
-                    echo "\n=== Triggering update-manifests ==="
-                    echo "ROOT_SERVICE_CHANGES: ${env.ROOT_SERVICE_CHANGES}"
-                    echo "K8S_CHANGES: ${env.K8S_CHANGES}"
-
+                    echo "\n=== Triggering Update Manifests Pipeline ==="
+                    echo "Reason: ROOT_SERVICE_CHANGES=${env.ROOT_SERVICE_CHANGES}, K8S_CHANGES=${env.K8S_CHANGES}"
+                    
                     try {
                         build job: 'update-manifests', wait: false
-                        echo "✓ update-manifests triggered"
+                        echo "✓ Update manifests pipeline triggered successfully"
                     } catch (Exception e) {
-                        echo "⚠ Warning: could not trigger update-manifests: ${e.message}"
-                        // Do not fail the build if downstream trigger fails
+                        echo "⚠ Warning: Could not trigger update-manifests pipeline: ${e.message}"
+                        // Don't fail the entire build if downstream job trigger fails
                     }
                 }
             }
@@ -279,12 +264,6 @@ pipeline {
                 sh 'command -v docker >/dev/null 2>&1 && docker logout || true'
                 sh 'command -v docker >/dev/null 2>&1 && docker image prune -a -f || true'
             }
-        }
-        success {
-            echo "✓ Pipeline completed successfully — build ${BUILD_NUMBER}"
-        }
-        failure {
-            echo "✗ Pipeline failed — build ${BUILD_NUMBER}"
         }
     }
 }
