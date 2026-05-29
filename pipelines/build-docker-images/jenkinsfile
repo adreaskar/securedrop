@@ -212,9 +212,9 @@ pipeline {
 
                         echo "\nUpdating deployment manifests in: ${k8sServiceDir}"
 
-                        // Find deployment manifests only in the service k8s directory
+                        // Find deployment, knative and service manifests in the service k8s directory
                         def deploymentFiles = sh(
-                               script: "find ${k8sServiceDir} -type f \\( -name '*deployment*.yaml' -o -name '*deployment*.yml' \\)",
+                               script: "find ${k8sServiceDir} -type f \( -name '*deployment*.yaml' -o -name '*deployment*.yml' -o -name '*knative*.yaml' -o -name '*knative*.yml' \)",
                             returnStdout: true
                         ).trim().split('\n').findAll { it }
 
@@ -247,7 +247,14 @@ pipeline {
 
                             git config user.email "jenkins@securedrop.local"
                             git config user.name "Jenkins CI"
+
+                            echo "Working tree status (before add):"
+                            git status --porcelain || true
+
                             git add k8s/
+
+                            echo "Staged files:" 
+                            git diff --cached --name-only || true
 
                             if ! git diff --cached --quiet; then
                                 git commit -m "CI: update k8s image tags - build ${BUILD_NUMBER}"
