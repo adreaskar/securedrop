@@ -31,7 +31,7 @@ COPY --chown=node-red:node-red flows_cred.json /usr/src/node-red/seed_config/flo
 
 # 5. Copy the startup script
 COPY --chown=node-red:node-red start.sh /usr/src/node-red/start.sh
-RUN chmod +x /usr/src/node-red/start.sh   
+RUN chmod +x /usr/src/node-red/start.sh
 
 # 6. Run script
 ENTRYPOINT ["/usr/src/node-red/start.sh"]
