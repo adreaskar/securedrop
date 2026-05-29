@@ -193,26 +193,25 @@ pipeline {
                             continue
                         }
 
-                        echo "\nUpdating manifests in: ${k8sServiceDir}"
+                        echo "\nUpdating deployment manifests in: ${k8sServiceDir}"
 
-                        // Find all YAML files in the service k8s directory
-                        def yamlFiles = sh(
-                            script: "find ${k8sServiceDir} -name '*.yaml' -o -name '*.yml'",
+                        // Find deployment manifests only in the service k8s directory
+                        def deploymentFiles = sh(
+                            script: "find ${k8sServiceDir} -type f \\\(-name '*deployment*.yaml' -o -name '*deployment*.yml' \\\)",
                             returnStdout: true
                         ).trim().split('\n').findAll { it }
 
                         def imageName = "${DOCKERHUB_CREDENTIALS_USR}/${serviceName}"
                         def newImageTag = "${imageName}:${env.IMAGE_TAG}"
 
-                        for (String yamlFile in yamlFiles) {
-                            if (!yamlFile) continue
+                        for (String deploymentFile in deploymentFiles) {
+                            if (!deploymentFile) continue
                             
-                            echo "Updating image tag in: ${yamlFile}"
+                            echo "Updating image tag in deployment file: ${deploymentFile}"
                             
-                            // Update image references in YAML files
-                            // This will replace image: <username>/<serviceName>:* with the new tag
+                            // Update the image line in deployment files only
                             sh """
-                                sed -i -e 's|image: ${imageName}:[^ ]*|image: ${newImageTag}|g' "${yamlFile}" || true
+                                sed -i -E 's|^(\s*image:\s*)${imageName}:[^[:space:]]+|\1${newImageTag}|' "${deploymentFile}" || true
                             """
                         }
                     }
