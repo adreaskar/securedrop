@@ -1,8 +1,7 @@
----
 - name: Configure, Initialize and Unseal HashiCorp Vault
   hosts: vm2
   become: yes
-  
+
   #Ορίζουμε τη μεταβλητή περιβάλλοντος που χρειάζεται το Vault CLI
   environment:
     VAULT_ADDR: "http://127.0.0.1:8200"
@@ -54,7 +53,7 @@
       copy:
         content: "{{ vault_init.stdout }}"
         dest: "./vault_keys_DO_NOT_SHARE.json"
-        mode: '0600'
+        mode: "0600"
       delegate_to: localhost
       become: no
       when: vault_init.changed

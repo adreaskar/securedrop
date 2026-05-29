@@ -6,7 +6,9 @@ dist
 dist-ssr
 *.local
 
-/node-red/prod/
+/nodered/dev/
+/nodered/flows_cred.json
+/nodered/settings.js
 
 .env
 .env.k8s

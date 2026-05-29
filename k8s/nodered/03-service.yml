@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: nodered
   ## added for nodered-monitor.yaml
-  labels:            # <--- Η ταυτότητα για τον Prometheus
+  labels:            
     app: nodered
   ## end added
 spec:

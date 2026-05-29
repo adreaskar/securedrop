@@ -2,7 +2,6 @@ pipeline {
   agent any
 
   parameters {
-    string(name: 'IMAGE_MAP', defaultValue: '', description: 'Comma-separated list service=image:tag')
     string(name: 'CREDENTIAL_ID', defaultValue: 'manifest-repo-creds', description: 'SSH credential id with push access')
   }
 
@@ -11,105 +10,57 @@ pipeline {
   }
 
   stages {
-    stage('Checkout manifests repo') {
+    stage('Clone repositories') {
       steps {
         script {
-          // repo and branch are fixed
-          echo "Cloning git@github.com:adreaskar/securedrop.git branch manifests"
+          echo 'Cloning manifests branch and source repository'
         }
         withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
-          sh '''
-            rm -rf manifests-repo || true
-            
-            # Fix permissions on the SSH key if it exists
-            if [ -f /var/lib/jenkins/.ssh/id_ed25519 ]; then
-              chmod 600 /var/lib/jenkins/.ssh/id_ed25519
-            fi
-            
-            # Add GitHub to known_hosts to avoid ssh key verification prompts
-            mkdir -p /var/lib/jenkins/.ssh
-            ssh-keyscan -t ed25519 github.com >> /var/lib/jenkins/.ssh/known_hosts 2>/dev/null || true
-            
-            git clone --branch "manifests" git@github.com:adreaskar/securedrop.git manifests-repo
+          sh '''#!/bin/bash
+            set -euo pipefail
+
+            rm -rf manifests-repo source-repo
+
+            mkdir -p ~/.ssh
+            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+            export GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+            git clone --branch manifests git@github.com:adreaskar/securedrop.git manifests-repo
+            git clone git@github.com:adreaskar/securedrop.git source-repo
           '''
         }
       }
     }
 
-    stage('Update manifests') {
+    stage('Sync k8s into manifests branch') {
       steps {
         withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
-          sh '''
-            #!/bin/bash
+          sh '''#!/bin/bash
             set -euo pipefail
 
-            if [ -z "${IMAGE_MAP}" ]; then
-              echo "No IMAGE_MAP provided, nothing to do."
+            SRC_DIR="source-repo/k8s"
+            DST_DIR="manifests-repo"
+
+            if [ ! -d "${SRC_DIR}" ]; then
+              echo "Source k8s directory not found: ${SRC_DIR}. Nothing to copy."
               exit 0
             fi
 
-            cd manifests-repo
-
-            # Configure git user
+            cd "${DST_DIR}"
             git config user.email "ci@securedrop.local"
             git config user.name "CI Pipeline"
 
-            # Fix permissions on the SSH key if it exists
-            if [ -f /var/lib/jenkins/.ssh/id_ed25519 ]; then
-              chmod 600 /var/lib/jenkins/.ssh/id_ed25519
-            fi
-            
-            # Add GitHub to known_hosts to avoid ssh key verification prompts
-            mkdir -p /var/lib/jenkins/.ssh
-            ssh-keyscan -t ed25519 github.com >> /var/lib/jenkins/.ssh/known_hosts 2>/dev/null || true
+            # Copy everything inside source k8s/ into manifests branch root.
+            rsync -a --delete --exclude '.git/' ../${SRC_DIR}/ ./
 
-            # Map build services to manifests branch folders
-            declare -A manifestFolders=(
-              ["keycloak"]="keycloak"
-              ["rabbitmq"]="rabbitmq"
-              ["node-red"]="nodered"
-              ["securedrop"]="webapp"
-              ["securedrop-api"]="api"
-              ["securedrop-scanner"]="scanner"
-              ["thingsboard"]="thingsboard"
-            )
-
-            # IMAGE_MAP format: svc=namespace/svc:tag,svc2=namespace2/svc2:tag
-            IFS=',' read -r -a entries <<< "${IMAGE_MAP}"
-
-            for e in "${entries[@]}"; do
-              svc="${e%%=*}"
-              img="${e#*=}"
-              echo "Updating image for $svc -> $img"
-
-              manifestFolder="${manifestFolders[$svc]:-}"
-              if [ -z "${manifestFolder}" ]; then
-                echo "No manifests folder mapping found for service: ${svc}"
-                continue
-              fi
-
-              if [ ! -d "${manifestFolder}" ]; then
-                echo "Manifests folder not found: ${manifestFolder}"
-                continue
-              fi
-
-              # Update all image references in the mapped manifests folder
-              find "${manifestFolder}" -type f \\( -name "*.yaml" -o -name "*.yml" \\) | while read file; do
-                if grep -q "^[[:space:]]*image:[[:space:]]*" "$file"; then
-                  perl -0pi.bak -e 's#(^[[:space:]]*image:[[:space:]]*).*$#$1'"${img}"'#mg' "$file"
-                  rm -f "${file}.bak"
-                  echo "  Updated: $file"
-                fi
-              done
-            done
-
-            # Commit only if changes
             if git status --porcelain | grep -q .; then
               git add -A
-              git commit -m "chore(ci): update images ${IMAGE_MAP}"
-              git push origin "manifests"
+              git commit -m "chore(ci): sync k8s content to manifests"
+              export GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+              git push origin manifests
+              echo "Manifests branch updated successfully."
             else
-              echo "No manifest changes detected."
+              echo "No manifest changes detected after sync."
             fi
           '''
         }
@@ -119,7 +70,9 @@ pipeline {
 
   post {
     always {
-      script { echo 'update-manifests job finished' }
+      script {
+        echo 'update-manifests job finished'
+      }
     }
   }
 }

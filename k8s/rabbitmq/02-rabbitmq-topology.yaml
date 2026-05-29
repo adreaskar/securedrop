@@ -16,7 +16,7 @@ data:
       "users": [
         {
           "name": "securedrop",
-          "password_hash": "m7ahxgBxXJ+sw/veff4pHq5+hCp9/G1F2T8bGaoIPmOhtGCy",
+          "password_hash": "syuDwKo7Iw57dyefMWJW1h7qwNKx4pGli95RNptbyGN8DZR2",
           "hashing_algorithm": "rabbit_password_hashing_sha256",
           "tags": [
             "administrator"

@@ -27,7 +27,8 @@ spec:
       serviceAccountName: api-sa
       containers:
         - name: securedrop-api
-          image: adreaskar/securedrop-api:2.0
+          image: securedropgr/securedrop-api:dedup-fix1
+          #adreaskar/securedrop-api:2.0
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args: [". /vault/secrets/config.env && node src/index.js"]
