@@ -1,0 +1,19 @@
+## this should be enabled with addon -> microk8s enable observability --kube-prometheus-stack-values=./observability-values.yaml
+grafana:
+  persistence:
+    enabled: true
+    storageClassName: "microk8s-hostpath"
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: "microk8s-hostpath"
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
