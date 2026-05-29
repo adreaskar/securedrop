@@ -2,9 +2,9 @@
 // These are the folders where docker builds will be triggered on changes
 def rootServices = [
     'api': [dockerfiles: ['Dockerfile']],
-    'webapp': [dockerfiles: ['Dockerfile', 'Dockerfile.prod']],
-    'nodered': [dockerfiles: ['Dockerfile.dev', 'Dockerfile']],
-    'scanner': [dockerfiles: ['Dockerfile']]
+    'webapp': [dockerfiles: ['Dockerfile.prod'], buildArgs: ['VITE_KEYCLOAK_URL','VITE_KEYCLOAK_REALM','VITE_KEYCLOAK_CLIENT_ID','VITE_API_BASE_URL']],
+    'nodered': [dockerfiles: ['Dockerfile']],
+    'stateless-scanner': [dockerfiles: ['Dockerfile']]
 ]
 
 pipeline {
@@ -28,6 +28,10 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
+        VITE_KEYCLOAK_URL = "https://keycloak.securedrop.gr"
+        VITE_KEYCLOAK_REALM = "securedrop-realm"
+        VITE_KEYCLOAK_CLIENT_ID = "web-app"
+        VITE_API_BASE_URL = "https://api.securedrop.gr/api"
     }
 
     stages {
@@ -135,6 +139,7 @@ pipeline {
                     for (String serviceName in servicesToBuild) {
                         def serviceConfig = rootServices[serviceName]
                         def dockerfile = null
+                        def buildArgsString = ''
 
                         // Find the first available Dockerfile
                         for (String candidate in serviceConfig.dockerfiles) {
@@ -143,6 +148,15 @@ pipeline {
                                 dockerfile = dockerfilePath
                                 break
                             }
+                        }
+
+                        // Build args for services that declare them
+                        if (serviceConfig.containsKey('buildArgs')) {
+                            def args = serviceConfig.buildArgs.collect { arg ->
+                                def val = env.getProperty(arg)
+                                return "--build-arg ${arg}=${val ?: ''}"
+                            }
+                            buildArgsString = args.join(' ')
                         }
 
                         if (!dockerfile) {
@@ -160,6 +174,7 @@ pipeline {
                             sh """
                                 docker build \
                                     -f "${dockerfile}" \
+                                    ${buildArgsString} \
                                     -t "${fullImageTag}" \
                                     "./${serviceName}"
                             """
