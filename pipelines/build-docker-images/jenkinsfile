@@ -213,8 +213,8 @@ pipeline {
                         echo "\nUpdating deployment manifests in: ${k8sServiceDir}"
 
                         // Find deployment, knative and service manifests in the service k8s directory
-                        def deploymentFiles = sh(
-                               script: "find ${k8sServiceDir} -type f \( -name '*deployment*.yaml' -o -name '*deployment*.yml' -o -name '*knative*.yaml' -o -name '*knative*.yml' \)",
+                            def deploymentFiles = sh(
+                                   script: "find ${k8sServiceDir} -type f \\(-name '*deployment*.yaml' -o -name '*deployment*.yml' -o -name '*knative*.yaml' -o -name '*knative*.yml' \\)",
                             returnStdout: true
                         ).trim().split('\n').findAll { it }
 
