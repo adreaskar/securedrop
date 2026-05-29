@@ -219,12 +219,23 @@ pipeline {
                             // Update image references in YAML files
                             // This will replace image: <username>/<serviceName>:* with the new tag
                             sh """
-                                sed -i '' 's|image: ${imageName}:[^ ]*|image: ${newImageTag}|g' "${yamlFile}" || true
+                                sed -i -e 's|image: ${imageName}:[^ ]*|image: ${newImageTag}|g' "${yamlFile}" || true
                             """
                         }
                     }
 
                     echo "\n✓ Manifests updated successfully"
+
+                    // Commit and push changes to master branch
+                    echo "\nCommitting k8s manifest updates to repository..."
+                    sh """
+                        git config user.email "jenkins@securedrop.local"
+                        git config user.name "Jenkins CI"
+                        git add k8s/
+                        git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER}" || true
+                        git push origin ${env.GIT_BRANCH_NAME}
+                    """
+                    echo "✓ Changes committed and pushed successfully"
                 }
             }
         }
