@@ -19,6 +19,7 @@ pipeline {
 
     parameters {
         booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Show what would be built without pushing to Docker Hub')
+        string(name: 'CREDENTIAL_ID', defaultValue: 'manifest-repo-creds', description: 'SSH credential id with push access')
     }
 
     triggers {
@@ -221,17 +222,27 @@ pipeline {
 
                     // Commit and push changes to master branch
                     echo "\nCommitting k8s manifest updates to repository..."
-                    sh """
-                        git config user.email "jenkins@securedrop.local"
-                        git config user.name "Jenkins CI"
-                        git add k8s/
-                        if ! git diff --cached --quiet; then
-                            git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER}"
-                            git push origin HEAD:master
-                        else
-                            echo "No k8s manifest changes to commit"
-                        fi
-                    """
+                    withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+                        sh '''#!/bin/bash
+                            set -euo pipefail
+
+                            mkdir -p ~/.ssh
+                            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+                            export GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+                            git config user.email "jenkins@securedrop.local"
+                            git config user.name "Jenkins CI"
+                            git add k8s/
+
+                            if ! git diff --cached --quiet; then
+                                git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER}"
+                                git remote set-url origin git@github.com:adreaskar/securedrop.git
+                                git push origin HEAD:master
+                            else
+                                echo "No k8s manifest changes to commit"
+                            fi
+                        '''
+                    }
                     echo "✓ Changes committed and pushed successfully"
                 }
             }
