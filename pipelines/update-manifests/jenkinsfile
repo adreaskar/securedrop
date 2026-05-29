@@ -47,15 +47,15 @@ pipeline {
             fi
 
             cd "${DST_DIR}"
-            git config user.email "ci@securedrop.local"
-            git config user.name "CI Pipeline"
+            git config user.email "jenkins@securedrop.local"
+            git config user.name "Jenkins CI"
 
             # Copy everything inside source k8s/ into manifests branch root.
             rsync -a --delete --exclude '.git/' ../${SRC_DIR}/ ./
 
             if git status --porcelain | grep -q .; then
               git add -A
-              git commit -m "chore(ci): sync k8s content to manifests"
+              git commit -m "CI: Sync k8s folder from master"
               export GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
               git push origin manifests
               echo "Manifests branch updated successfully."

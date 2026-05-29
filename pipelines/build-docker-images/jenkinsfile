@@ -235,7 +235,7 @@ pipeline {
                             git add k8s/
 
                             if ! git diff --cached --quiet; then
-                                git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER}"
+                                git commit -m "CI: update k8s image tags - build ${BUILD_NUMBER}"
                                 git remote set-url origin git@github.com:adreaskar/securedrop.git
                                 git push origin HEAD:master
                             else
