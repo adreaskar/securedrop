@@ -10,7 +10,7 @@ RUN rm -f /data/flows.json
 USER node-red
 
 # 1. Install clamscan npm package
-RUN npm install clamscan
+RUN npm install clamscan 
 
 # 2. Install External Nodes
 # We run npm install in the default workdir (/usr/src/node-red).
