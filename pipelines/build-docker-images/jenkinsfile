@@ -27,7 +27,6 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
-        IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT_SHORT}"
     }
 
     stages {
@@ -38,10 +37,12 @@ pipeline {
                     env.GIT_BRANCH_NAME = 'master'
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
 
                     echo "Branch: ${env.GIT_BRANCH_NAME}"
                     echo "Commit: ${env.GIT_COMMIT}"
                     echo "Commit Short: ${env.GIT_COMMIT_SHORT}"
+                    echo "Image Tag: ${env.IMAGE_TAG}"
                     
                     echo "Pipeline running on branch: ${env.GIT_BRANCH_NAME}"
                 }
@@ -224,8 +225,12 @@ pipeline {
                         git config user.email "jenkins@securedrop.local"
                         git config user.name "Jenkins CI"
                         git add k8s/
-                        git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER}" || true
-                        git push origin master
+                        if ! git diff --cached --quiet; then
+                            git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER}"
+                            git push origin HEAD:master
+                        else
+                            echo "No k8s manifest changes to commit"
+                        fi
                     """
                     echo "✓ Changes committed and pushed successfully"
                 }
