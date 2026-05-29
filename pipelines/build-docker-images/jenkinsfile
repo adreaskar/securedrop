@@ -35,21 +35,13 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    env.GIT_BRANCH_NAME = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+                    env.GIT_BRANCH_NAME = 'master'
                     env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
 
                     echo "Branch: ${env.GIT_BRANCH_NAME}"
                     echo "Commit: ${env.GIT_COMMIT}"
                     echo "Commit Short: ${env.GIT_COMMIT_SHORT}"
-                    
-                    // Skip if not on main/master branch
-                    if (!env.GIT_BRANCH_NAME.matches('(main|master|HEAD)')) {
-                        env.SKIP_PIPELINE = 'true'
-                        currentBuild.description = "Skipped: not on main/master branch (on ${env.GIT_BRANCH_NAME})"
-                        echo "Skipping: pipeline only runs on main/master branch, currently on ${env.GIT_BRANCH_NAME}"
-                        return
-                    }
                     
                     echo "Pipeline running on branch: ${env.GIT_BRANCH_NAME}"
                 }
@@ -233,7 +225,7 @@ pipeline {
                         git config user.name "Jenkins CI"
                         git add k8s/
                         git commit -m "chore: update k8s image tags - build ${BUILD_NUMBER}" || true
-                        git push origin ${env.GIT_BRANCH_NAME}
+                        git push origin master
                     """
                     echo "✓ Changes committed and pushed successfully"
                 }
