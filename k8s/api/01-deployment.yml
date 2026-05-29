@@ -27,7 +27,7 @@ spec:
       serviceAccountName: api-sa
       containers:
         - name: securedrop-api
-          image: securedropgr/api:106-2fae86c
+          image: securedropgr/api:109-40abdd8
           #adreaskar/securedrop-api:2.0
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
