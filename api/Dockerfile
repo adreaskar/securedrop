@@ -4,7 +4,7 @@ FROM node:24.12.0-slim
 RUN apt-get update && apt-get install -y tini && rm -rf /var/lib/apt/lists/*
 
 # CHANGED: Tini is located at /usr/bin/tini on Debian (it was /sbin/tini on Alpine)
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--"] 
 
 WORKDIR /app
 
