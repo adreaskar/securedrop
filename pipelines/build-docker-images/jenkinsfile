@@ -211,7 +211,7 @@ pipeline {
                             
                             // Update the image line in deployment files only
                             sh """
-                                sed -i -E 's|^(\s*image:\s*)${imageName}:[^[:space:]]+|\1${newImageTag}|' "${deploymentFile}" || true
+                                sed -i -E 's|^([[:space:]]*image:[[:space:]]*)${imageName}:[^[:space:]]+|\1${newImageTag}|' "${deploymentFile}" || true
                             """
                         }
                     }
