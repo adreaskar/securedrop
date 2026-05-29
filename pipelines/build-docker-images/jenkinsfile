@@ -203,7 +203,6 @@ pipeline {
 
                     for (String serviceName in servicesToBuild) {
                         def k8sServiceDir = "k8s/${serviceName}"
-                        def deploymentImagePattern = serviceName == 'nodered' ? 'securedrop-nodered' : serviceName
                         
                         if (!fileExists(k8sServiceDir)) {
                             echo "⚠ Warning: k8s directory not found for ${serviceName}: ${k8sServiceDir}"
@@ -228,7 +227,7 @@ pipeline {
                             
                             // Update the image line in deployment files only
                             sh """
-                                sed -i -E 's|^([[:space:]]*image:[[:space:]]*)[^[:space:]]*${deploymentImagePattern}:[^[:space:]]+|\\1${newImageTag}|' "${deploymentFile}" || true
+                                sed -i -E 's|^([[:space:]]*image:[[:space:]]*)[^[:space:]]*${serviceName}:[^[:space:]]+|\\1${newImageTag}|' "${deploymentFile}" || true
                             """
                         }
                     }
