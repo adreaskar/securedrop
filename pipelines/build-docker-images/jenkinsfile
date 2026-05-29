@@ -197,7 +197,7 @@ pipeline {
 
                         // Find deployment manifests only in the service k8s directory
                         def deploymentFiles = sh(
-                            script: "find ${k8sServiceDir} -type f \\\(-name '*deployment*.yaml' -o -name '*deployment*.yml' \\\)",
+                               script: "find ${k8sServiceDir} -type f \\( -name '*deployment*.yaml' -o -name '*deployment*.yml' \\)",
                             returnStdout: true
                         ).trim().split('\n').findAll { it }
 
