@@ -23,7 +23,6 @@ spec:
           {{- end -}}
     spec:
       serviceAccountName: nodered-sa
-      
 
       initContainers:
         - name: fix-permissions
@@ -34,7 +33,7 @@ spec:
               mountPath: /data
       containers:
         - name: nodered
-securedropgr/nodered:93-1c17b69
+          image: securedropgr/nodered:93-1c17b69
           resources:
             requests:
               memory: "128Mi"
@@ -43,7 +42,7 @@ spec:
               memory: "384Mi"
               cpu: "500m"
           ports:
-            - containerPort: 1880 
+            - containerPort: 1880
           volumeMounts:
             - name: data
               mountPath: /data
