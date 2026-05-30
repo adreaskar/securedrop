@@ -1,0 +1,101 @@
+- name: Setup Nginx Reverse Proxy and Let's Encrypt SSL
+  hosts: vm2
+  become: yes
+  vars:
+    jenkins_domain: "jenkins.securedrop.gr"
+    vault_domain: "vault.securedrop.gr"
+    admin_email: "adreas@karabetian.gr"
+
+  tasks:
+    # 1. Εγκατάσταση Εργαλείων
+    - name: Install Nginx and SSL tools
+      apt:
+        name:
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+        state: present
+        update_cache: yes
+
+    # 2. Άνοιγμα Firewall
+    - name: Allow HTTP and HTTPS traffic
+      ufw:
+        rule: allow
+        name: 'Nginx Full'
+
+    # 3. Δημιουργία Nginx Config για Jenkins και Vault
+    - name: Create Nginx configuration for Proxy
+      copy:
+        dest: /etc/nginx/sites-available/reverse_proxy.conf
+        content: |
+          server {
+              listen 80;
+              server_name {{ jenkins_domain }};
+              location / {
+                  proxy_pass http://127.0.0.1:8080;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+
+          server {
+              listen 80;
+              server_name {{ vault_domain }};
+              location / {
+                  proxy_pass http://127.0.0.1:8200;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+
+    # 4. Ενεργοποίηση του config και απενεργοποίηση του default
+    - name: Enable site configuration
+      file:
+        src: /etc/nginx/sites-available/reverse_proxy.conf
+        dest: /etc/nginx/sites-enabled/reverse_proxy.conf
+        state: link
+
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Restart Nginx
+
+    - name: Flush handlers to restart Nginx immediately
+      meta: flush_handlers
+
+    # 5. Έκδοση Πιστοποιητικών SSL (Let's Encrypt)
+    - name: Obtain SSL certificates and configure Nginx
+      command: >
+        certbot --nginx 
+        -d {{ jenkins_domain }} 
+        -d {{ vault_domain }} 
+        --non-interactive 
+        --agree-tos 
+        -m {{ admin_email }} 
+        --redirect
+      register: certbot_output
+      changed_when: "'Successfully deployed certificate' in certbot_output.stdout"
+
+    # 6. Κλείσιμο απευθείας πρόσβασης (Security)
+    - name: Deny direct access to Jenkins port 8080
+      ufw:
+        rule: deny
+        port: '8080'
+        proto: tcp
+
+    - name: Deny direct access to Vault port 8200
+      ufw:
+        rule: deny
+        port: '8200'
+        proto: tcp
+
+  handlers:
+    - name: Restart Nginx
+      systemd:
+        name: nginx
+        state: restarted
