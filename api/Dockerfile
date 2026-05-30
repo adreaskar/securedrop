@@ -1,24 +1,26 @@
 FROM node:24.12.0-slim
 
-# 1. Install 'tini' for proper signal handling (PID 1)
-RUN apt-get update && apt-get install -y tini && rm -rf /var/lib/apt/lists/*
-
-# CHANGED: Tini is located at /usr/bin/tini on Debian (it was /sbin/tini on Alpine)
-ENTRYPOINT ["/usr/bin/tini", "--"] 
+# Install tini for proper signal handling (PID 1 process manager)
+# Ensures graceful shutdown and correct zombie process reaping
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 2. Install dependencies
+# Copy only package files first to leverage Docker layer caching
+# npm ci will only re-run when package.json or package-lock.json changes
 COPY package*.json ./
 RUN npm ci --only=production
 
-# 3. Copy source code with correct ownership
+# Copy source code with correct ownership (non-root node user)
 COPY --chown=node:node src ./src
 
-# 4. Security: Switch to non-root user 'node'
+# Security: run as non-root user
 USER node
 
 EXPOSE 3001
 
-# 5. Run Node directly
+# tini as entrypoint ensures signals (SIGTERM/SIGINT) are forwarded correctly to node
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "src/index.js"]

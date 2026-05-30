@@ -1,39 +1,44 @@
-# Stage 1: Build Node.js app
+# =========================================================
+# Stage 1: Build (Node.js + Vite)
+# =========================================================
 FROM node:24.12.0-slim AS builder
+
 WORKDIR /app
 
-# Copy package files first to leverage Docker cache
+# Copy package files first to leverage Docker layer caching
+# npm ci will only re-run when package.json or package-lock.json changes
 COPY package*.json ./
-
 RUN npm ci
 
+# Copy the rest of the source code
 COPY . .
 
-# Accept arguments
+# Build-time arguments — passed via --build-arg in docker build
+# Vite bakes these into the static bundle at build time (not runtime)
 ARG VITE_KEYCLOAK_URL
 ARG VITE_KEYCLOAK_REALM
 ARG VITE_KEYCLOAK_CLIENT_ID
 ARG VITE_API_BASE_URL
 
-# Bake them into environment variables
-ENV VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL
-ENV VITE_KEYCLOAK_REALM=$VITE_KEYCLOAK_REALM
-ENV VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL \
+    VITE_KEYCLOAK_REALM=$VITE_KEYCLOAK_REALM \
+    VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID \
+    VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-# Build the static files (creates /app/dist)
+# Build static files → output in /app/dist
 RUN npm run build
 
-# Stage 2: Serve the app (Nginx)
-FROM nginx:alpine
+# =========================================================
+# Stage 2: Serve (Nginx)
+# Final image contains only static files + nginx, no Node.js
+# =========================================================
+FROM nginx:1.27-alpine
 
-# Remove default nginx config
+# Remove default nginx config and replace with custom
 RUN rm /etc/nginx/conf.d/default.conf
-
-# Copy custom config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy the build output from Stage 1 to Nginx
+# Copy only the build output from Stage 1
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 8081
