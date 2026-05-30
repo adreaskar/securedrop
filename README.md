@@ -1,84 +1,137 @@
-# SecureDrop - Kubernetes Deployment Guide
+# SecureDrop — Kubernetes Manifests
 
-Let's deploy SecureDrop on a Kubernetes cluster using **MicroK8s**.
+Kubernetes manifests για την ανάπτυξη της πλατφόρμας SecureDrop σε MicroK8s cluster.
 
-## 📋 Prerequisites
+---
 
-The server must have **MicroK8s** and **Docker** installed.
+## Προαπαιτούμενα
 
-## 🧱 Firewall Configuration (UFW)
+Πριν από οποιαδήποτε ανάπτυξη, βεβαιώσου ότι έχουν εκτελεστεί τα παρακάτω βήματα:
 
-To make the UIs of the services accessible, the following ports must be opened on the server:
+- ✅ Ansible playbooks (VM setup, MicroK8s installation)
+- ✅ OpenTofu (Vault configuration, secrets, ServiceAccounts)
+- ✅ `kubectl` ρυθμισμένο με πρόσβαση στο cluster
+- ✅ DNS records να δείχνουν στην IP του cluster
+
+---
+
+## Deployment
+
+### Αυτόματο (CI/CD — Προτεινόμενο)
+
+Η ανάπτυξη γίνεται αυτόματα μέσω του CI/CD pipeline:
+
+```
+git push origin master
+      ↓
+Jenkins (build-docker-images)
+      ↓
+ArgoCD sync (manifests branch)
+      ↓
+Kubernetes cluster
+```
+
+Κάθε push στο `master` branch ενεργοποιεί αυτόματα το Jenkins pipeline που χτίζει τα Docker images, ενημερώνει τα manifests και το ArgoCD κάνει sync στο cluster.
+
+### Χειροκίνητο (μέσω Ansible)
+
+Για την αρχική ανάπτυξη ή έκτακτη χειροκίνητη εφαρμογή:
+
+```bash
+cd ansible/
+ansible-playbook -i hosts.ini deploy_k8s.yml
+```
+
+### Χειροκίνητο (απευθείας kubectl)
+
+```bash
+# Εφαρμογή συγκεκριμένου component
+kubectl apply -f k8s/api/
+
+# Εφαρμογή όλων με τη σωστή σειρά
+kubectl apply -f k8s/middleware/
+kubectl apply -f k8s/keycloak/
+kubectl apply -f k8s/minio/
+kubectl apply -f k8s/rabbitmq/
+kubectl apply -f k8s/clamav/
+kubectl apply -f k8s/nodered/
+kubectl apply -f k8s/thingsboard/
+kubectl apply -f k8s/api/
+kubectl apply -f k8s/stateless-scanner/
+kubectl apply -f k8s/webapp/
+kubectl apply -f k8s/servicemonitor/
+kubectl apply -f k8s/ingress/
+kubectl apply -f k8s/cluster-issuer-traefik.yaml
+```
+
+---
+
+## Firewall (UFW)
 
 ```bash
 sudo ufw allow 80
 sudo ufw allow 443
 ```
 
-## 🚀 Deployment
+---
+
+## Rollback
+
+Για επαναφορά σε προηγούμενη έκδοση, αλλαγή του image tag στο manifest και push:
 
 ```bash
+# Εύρεση διαθέσιμων tags
+docker images securedropgr/api
 
-git clone https://github.com/adreaskar/securedrop.git
-cd securedrop/k8s
+# Αλλαγή tag στο manifest
+sed -i 's|securedropgr/api:.*|securedropgr/api:<previous-tag>|' k8s/api/01-deployment.yml
 
-# Dry run (preview only)
-DRY_RUN=true ./deploy.sh
-
-# Real deployment
-./deploy.sh
-
+git add k8s/api/01-deployment.yml
+git commit -m "rollback: api to <previous-tag>"
+git push origin master
 ```
 
-## 📂 Project Structure
+Το ArgoCD θα εντοπίσει την αλλαγή και θα κάνει αυτόματα sync.
+
+---
+
+## Project Structure
 
 ```text
 k8s/
-├─ api/                        # API (backend services)
-│  ├─ 01-deployment.yml
-│  └─ 02-service.yml
-├─ clamav/                     # ClamAV antivirus service for file scanning
-│  ├─ 01-storage.yaml
-│  ├─ 02-deployment.yaml
-│  └─ 03-service.yaml
-├─ ingress/                    # Ingress  (SSL, block metrics)
-│  ├─ ingress-block-metrics.yaml
-│  └─ ssl-ingress-traefik.yaml
-├─ keycloak/                   # Identity & Access Management
-│  ├─ 01-deployment.yaml
-│  └─ 02-service.yaml
-├─ middleware/                 # Traefik Middlewares (CRDs for routing, security, redirects)
-│  ├─ middleware-block.yaml
-│  └─ redirect-middleware.yaml
-├─ minio/                      # MinIO object storage (S3-compatible)
-│  ├─ 01-storage.yaml
-│  ├─ 02-deployment.yaml
-│  ├─ 03-service.yaml
-│  └─ 04-minio-setup-script.yaml
-├─ nodered/                    # Node-RED for IoT flows, automation, and service integration
-│  ├─ 01-storage.yaml
-│  ├─ 02-deployment.yml
-│  └─ 03-service.yml
-├─ rabbitmq/                   # RabbitMQ message broker for asynchronous communication
-│  ├─ 01-storage.yaml
-│  ├─ 02-rabbitmq-topology.yaml
-│  ├─ 03-deployment.yaml
-│  └─ 04-service.yaml
-├─ servicemonitor/             # Prometheus ServiceMonitors for observability
-│  ├─ clamav-monitor.yaml
-│  ├─ keycloak-monitor.yaml
-│  ├─ minio-monitor.yaml
-│  └─ rabbitmq-monitor.yaml
-├─ thingsboard/                 # Dashboard For clients
-│  ├─ 01-storage.yaml
-│  ├─ 02-deployment.yaml
-│  └─ 03-service.yaml
-├─ webapp/                      # Frontend web application
-│  ├─ 01-deployment.yaml
-│  └─ 02-service.yaml
-├─ cluster-issuer-traefik.yaml  # ClusterIssuer for cert-manager / Traefik
-├─ deploy.sh                    # Script For Deployment
-├─ .env.example                 # Example environment variables
-├─ kustomization.yml            # Root kustomization (namespace, secrets, configs)
-└─ README.md                    # Project documentation
+├── api/                        # API (backend service)
+├── clamav/                     # ClamAV antivirus engine — εκτελεί το πραγματικό scanning των αρχείων
+├── ingress/                    # Ingress (SSL, block metrics)
+├── keycloak/                   # Identity & Access Management
+├── middleware/                 # Traefik Middlewares (routing, security, redirects)
+├── minio/                      # MinIO object storage (S3-compatible)
+├── nodered/                    # Node-RED για αυτοματισμούς και service integration
+├── rabbitmq/                   # RabbitMQ message broker
+├── servicemonitor/             # Prometheus ServiceMonitors για observability
+├── stateless-scanner/          # Stateless file streamer to antivirus scanner service
+├── thingsboard/                # IoT dashboard
+├── webapp/                     # Frontend web application
+├── .env.example                # Παράδειγμα environment variables
+├── argocd-securedrop-app.yaml  # ArgoCD Application CRD
+├── cluster-issuer-traefik.yaml # ClusterIssuer για cert-manager / Traefik
+├── kustomization.yml           # Kustomization file
+└── observability-values.yaml   # Custom values για το Kube-Prometheus-Stack
+```
+
+---
+
+## Χρήσιμες Εντολές
+
+```bash
+# Κατάσταση pods
+kubectl get pods -o wide
+
+# Logs συγκεκριμένου pod
+kubectl logs -f deployment/api
+
+# Κατάσταση πιστοποιητικών SSL
+kubectl get certificate,order,challenge
+
+# Κατάσταση ArgoCD sync
+kubectl get application -n argocd
 ```
