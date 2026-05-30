@@ -12,7 +12,7 @@ RUN npm install --omit=dev
 # Copy source code with correct ownership (non-root node user)
 COPY --chown=node:node src ./src
 
-# Security: run as non-root user
+#  Security: run as non-root user
 USER node
 
 EXPOSE 8080

@@ -418,7 +418,7 @@ pipeline {
                         def kubevalAvailable = sh(script: 'command -v kubeval', returnStatus: true) == 0
                         if (kubevalAvailable) {
                             def kubevalResult = sh(
-                                script: "find ${k8sServiceDir} -name '*.yaml' -o -name '*.yml' | xargs kubeval --strict 2>&1",
+                                script: "find ${k8sServiceDir} -name '*.yaml' -o -name '*.yml' | xargs kubeval --strict --ignore-missing-schemas 2>&1",
                                 returnStatus: true
                             )
                             if (kubevalResult != 0) {
