@@ -1,32 +1,24 @@
 FROM nodered/node-red:4.1.2
 
-# Switch to root to perform cleanup
 USER root
-
-# Remove the default flow file so Docker doesn't copy it to the volume.
 RUN rm -f /data/flows.json
 
-# Switch to node-red user for security
 USER node-red
 
-# 1. Install npm packages & External Nodes
+# Install npm packages & create seed directory
 RUN npm install \
     clamscan@2.4.0 \
     node-red-node-aws@0.4.0 \
     @stormpass/node-red-contrib-amqp@1.4.1 \
-    @reggae_ulli/node-red-contrib-minio-all-fix@0.0.4
+    @reggae_ulli/node-red-contrib-minio-all-fix@0.0.4 \
+    && mkdir -p /usr/src/node-red/seed_config
 
-# 2. Create a seed directory to hold our configs
-RUN mkdir -p /usr/src/node-red/seed_config
-
-# 3. Copy configs to the seed directory
+# Copy configs
 COPY --chown=node-red:node-red settings.js /usr/src/node-red/seed_config/settings.js
 COPY --chown=node-red:node-red flows.json /usr/src/node-red/seed_config/flows.json
 COPY --chown=node-red:node-red flows_cred.json /usr/src/node-red/seed_config/flows_cred.json
 
-# 4. Copy and prepare the startup script
-COPY --chown=node-red:node-red start.sh /usr/src/node-red/start.sh
-RUN chmod +x /usr/src/node-red/start.sh
+# Copy startup script — --chmod αντί για RUN chmod
+COPY --chown=node-red:node-red --chmod=755 start.sh /usr/src/node-red/start.sh
 
-# 5. Run script
 ENTRYPOINT ["/usr/src/node-red/start.sh"]
