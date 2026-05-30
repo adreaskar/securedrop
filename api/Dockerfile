@@ -22,6 +22,6 @@ USER node
 
 EXPOSE 3001
 
-# tini as entrypoint ensures signals (SIGTERM/SIGINT) are forwarded correctly to node
+#tini as entrypoint ensures signals (SIGTERM/SIGINT) are forwarded correctly to node
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "src/index.js"]
