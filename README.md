@@ -8,15 +8,15 @@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   LOCAL DEVELOPMENT                  │
-│              Docker Compose (all services)           │
+│                   LOCAL DEVELOPMENT                 │
+│              Docker Compose (all services)          │
 └─────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────┐
-│                     PRODUCTION                       │
-│                                                      │
-│  git push → Jenkins (CI) → ArgoCD (CD) → MicroK8s  │
-│                                                      │
+│                     PRODUCTION                      │
+│                                                     │
+│  git push → Jenkins (CI) → ArgoCD (CD) → MicroK8s   │
+│                                                     │
 │  Ansible   → VM setup, MicroK8s, Vault              │
 │  OpenTofu  → Secrets, Kubernetes RBAC               │
 └─────────────────────────────────────────────────────┘
