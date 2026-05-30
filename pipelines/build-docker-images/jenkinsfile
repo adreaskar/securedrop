@@ -35,6 +35,10 @@ pipeline {
     }
 
     stages {
+
+        // =========================================================
+        // STAGE: Checkout
+        // =========================================================
         stage('Checkout') {
             steps {
                 checkout scm
@@ -48,12 +52,54 @@ pipeline {
                     echo "Commit: ${env.GIT_COMMIT}"
                     echo "Commit Short: ${env.GIT_COMMIT_SHORT}"
                     echo "Image Tag: ${env.IMAGE_TAG}"
-                    
+
                     echo "Pipeline running on branch: ${env.GIT_BRANCH_NAME}"
                 }
             }
         }
 
+        // =========================================================
+        // STAGE: Pre-flight Validation
+        // Fail fast πριν χαθεί χρόνος σε build
+        // =========================================================
+        stage('Pre-flight Validation') {
+            steps {
+                script {
+                    echo "\n=== Pre-flight Validation ==="
+
+                    // 1. Docker daemon accessible
+                    echo "Checking Docker daemon..."
+                    sh 'docker info > /dev/null'
+                    echo "✓ Docker daemon is accessible"
+
+                    // 2. Required env vars για webapp build args
+                    echo "Checking required environment variables..."
+                    def requiredVars = ['VITE_KEYCLOAK_URL', 'VITE_KEYCLOAK_REALM', 'VITE_KEYCLOAK_CLIENT_ID', 'VITE_API_BASE_URL']
+                    requiredVars.each { v ->
+                        if (!env.getProperty(v)) {
+                            error("Pre-flight failed: Missing required env var: ${v}")
+                        }
+                        echo "✓ ${v} is set"
+                    }
+
+                    // 3. DockerHub credentials reachable (dry login)
+                    if (!params.DRY_RUN) {
+                        echo "Validating DockerHub credentials..."
+                        sh 'echo "$DOCKERHUB_CREDENTIALS_PSW" | docker login -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin'
+                        sh 'docker logout'
+                        echo "✓ DockerHub credentials are valid"
+                    } else {
+                        echo "DRY RUN: Skipping DockerHub credential check"
+                    }
+
+                    echo "=== Pre-flight Validation Passed ===\n"
+                }
+            }
+        }
+
+        // =========================================================
+        // STAGE: Detect Changes
+        // =========================================================
         stage('Detect Changes') {
             when {
                 expression { env.SKIP_PIPELINE != 'true' }
@@ -92,13 +138,11 @@ pipeline {
                     for (String filePath in changedFiles) {
                         def topLevel = filePath.contains('/') ? filePath.split('/')[0] : filePath
 
-                        // Check if change is in k8s directory
                         if (topLevel == 'k8s') {
                             k8sChangesDetected = true
                             echo "K8s directory change detected: ${filePath}"
                         }
 
-                        // Check if change is in a root service folder with Dockerfile
                         if (rootServices.containsKey(topLevel)) {
                             servicesToBuild << topLevel
                             rootServiceChangesDetected = true
@@ -106,7 +150,6 @@ pipeline {
                         }
                     }
 
-                    // Store results in environment
                     env.K8S_CHANGES = k8sChangesDetected ? 'true' : 'false'
                     env.ROOT_SERVICE_CHANGES = rootServiceChangesDetected ? 'true' : 'false'
                     env.SERVICES_TO_BUILD = servicesToBuild.join(',')
@@ -120,6 +163,66 @@ pipeline {
             }
         }
 
+        // =========================================================
+        // STAGE: Lint Dockerfiles (hadolint)
+        // Τρέχει πριν το build για να αποφύγουμε άσκοπο χρόνο
+        // =========================================================
+        stage('Lint Dockerfiles') {
+            when {
+                expression { env.ROOT_SERVICE_CHANGES == 'true' }
+            }
+            steps {
+                script {
+                    def servicesToBuild = env.SERVICES_TO_BUILD.split(',').collect { it.trim() }.findAll { it }
+                    def lintFailed = false
+
+                    echo "\n=== Dockerfile Linting (hadolint) ==="
+
+                    // Βεβαιώσου ότι το hadolint είναι διαθέσιμο
+                    def hadolintAvailable = sh(script: 'command -v hadolint', returnStatus: true) == 0
+                    if (!hadolintAvailable) {
+                        echo "⚠ hadolint not found. Attempting to install..."
+                        sh '''
+                            curl -sSL -o /usr/local/bin/hadolint \
+                                https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
+                            chmod +x /usr/local/bin/hadolint
+                        '''
+                    }
+
+                    for (String serviceName in servicesToBuild) {
+                        def serviceConfig = rootServices[serviceName]
+
+                        for (String candidate in serviceConfig.dockerfiles) {
+                            def dockerfilePath = "${serviceName}/${candidate}"
+                            if (fileExists(dockerfilePath)) {
+                                echo "Linting: ${dockerfilePath}"
+                                // DL3008/DL3009: apt-get pin versions (noisy σε dev images)
+                                // DL3018: apk pin versions
+                                def lintResult = sh(
+                                    script: "hadolint ${dockerfilePath} --ignore DL3008 --ignore DL3009 --ignore DL3018",
+                                    returnStatus: true
+                                )
+                                if (lintResult != 0) {
+                                    echo "✗ Lint issues found in ${dockerfilePath}"
+                                    lintFailed = true
+                                } else {
+                                    echo "✓ ${dockerfilePath} passed linting"
+                                }
+                            }
+                        }
+                    }
+
+                    if (lintFailed) {
+                        error("Dockerfile linting failed. Fix the above issues before building.")
+                    }
+                    echo "=== Linting Passed ===\n"
+                }
+            }
+        }
+
+        // =========================================================
+        // STAGE: Build and Push Images
+        // =========================================================
         stage('Build and Push Images') {
             when {
                 expression { env.ROOT_SERVICE_CHANGES == 'true' }
@@ -127,7 +230,7 @@ pipeline {
             steps {
                 script {
                     def servicesToBuild = env.SERVICES_TO_BUILD.split(',').collect { it.trim() }.findAll { it }
-                    
+
                     echo "Building ${servicesToBuild.size()} services with tag: ${env.IMAGE_TAG}"
 
                     if (params.DRY_RUN) {
@@ -141,7 +244,6 @@ pipeline {
                         def dockerfile = null
                         def buildArgsString = ''
 
-                        // Find the first available Dockerfile
                         for (String candidate in serviceConfig.dockerfiles) {
                             def dockerfilePath = "${serviceName}/${candidate}"
                             if (fileExists(dockerfilePath)) {
@@ -150,7 +252,6 @@ pipeline {
                             }
                         }
 
-                        // Build args for services that declare them
                         if (serviceConfig.containsKey('buildArgs')) {
                             def args = serviceConfig.buildArgs.collect { arg ->
                                 def val = env.getProperty(arg)
@@ -181,6 +282,64 @@ pipeline {
 
                             sh "docker push \"${fullImageTag}\""
                             echo "✓ Successfully pushed: ${fullImageTag}"
+
+                            // ---------------------------------------------------------
+                            // TEST 1: Smoke test — βεβαιώνει ότι το container εκκινεί
+                            // ---------------------------------------------------------
+                            echo "Running smoke test for ${fullImageTag}..."
+                            def smokeResult = sh(
+                                script: "docker run --rm --entrypoint '' \"${fullImageTag}\" echo SMOKE_OK",
+                                returnStatus: true
+                            )
+                            if (smokeResult != 0) {
+                                error("Smoke test failed for ${fullImageTag}: container did not start cleanly")
+                            }
+                            echo "✓ Smoke test passed for ${serviceName}"
+
+                            // ---------------------------------------------------------
+                            // TEST 2: Image size check
+                            // Threshold: 500MB — προσάρμοσε ανάλογα με το service
+                            // ---------------------------------------------------------
+                            echo "Checking image size for ${fullImageTag}..."
+                            def sizeBytes = sh(
+                                script: "docker inspect \"${fullImageTag}\" --format='{{.Size}}'",
+                                returnStdout: true
+                            ).trim().toLong()
+                            def sizeMB = sizeBytes / 1_000_000
+                            echo "Image size: ${sizeMB}MB"
+                            if (sizeBytes > 500_000_000L) {
+                                echo "⚠ Warning: ${serviceName} image is ${sizeMB}MB (> 500MB). Consider optimizing."
+                                // Χρησιμοποιούμε warning αντί για error — άλλαξε σε error αν θες hard limit
+                            } else {
+                                echo "✓ Image size OK (${sizeMB}MB)"
+                            }
+
+                            // ---------------------------------------------------------
+                            // TEST 3: Vulnerability scan (Trivy)
+                            // Μόνο CRITICAL για να μην μπλοκάρει σε unpatched HIGH CVEs
+                            // --ignore-unfixed: αγνοεί CVEs χωρίς διαθέσιμο fix
+                            // ---------------------------------------------------------
+                            echo "Running Trivy vulnerability scan for ${fullImageTag}..."
+                            def trivyAvailable = sh(script: 'command -v trivy', returnStatus: true) == 0
+                            if (trivyAvailable) {
+                                def trivyResult = sh(
+                                    script: """
+                                        trivy image \
+                                            --exit-code 1 \
+                                            --severity CRITICAL \
+                                            --ignore-unfixed \
+                                            --no-progress \
+                                            \"${fullImageTag}\"
+                                    """,
+                                    returnStatus: true
+                                )
+                                if (trivyResult != 0) {
+                                    error("Trivy scan failed: CRITICAL vulnerabilities found in ${fullImageTag}")
+                                }
+                                echo "✓ Trivy scan passed for ${serviceName}"
+                            } else {
+                                echo "⚠ trivy not found — skipping vulnerability scan. Install trivy on the Jenkins agent."
+                            }
                         }
                     }
 
@@ -191,6 +350,9 @@ pipeline {
             }
         }
 
+        // =========================================================
+        // STAGE: Update k8s directories
+        // =========================================================
         stage('Update k8s directories') {
             when {
                 expression { env.ROOT_SERVICE_CHANGES == 'true' }
@@ -198,12 +360,12 @@ pipeline {
             steps {
                 script {
                     def servicesToBuild = env.SERVICES_TO_BUILD.split(',').collect { it.trim() }.findAll { it }
-                    
+
                     echo "Updating k8s manifests for built services..."
 
                     for (String serviceName in servicesToBuild) {
                         def k8sServiceDir = "k8s/${serviceName}"
-                        
+
                         if (!fileExists(k8sServiceDir)) {
                             echo "⚠ Warning: k8s directory not found for ${serviceName}: ${k8sServiceDir}"
                             continue
@@ -211,7 +373,6 @@ pipeline {
 
                         echo "\nUpdating deployment manifests in: ${k8sServiceDir}"
 
-                        // Find deployment, knative and service manifests in the service k8s directory
                         def deploymentFiles = sh(
                             script: """find ${k8sServiceDir} -type f \\( -name '*deployment*.yaml' -o -name '*deployment*.yml' -o -name '*knative*.yaml' -o -name '*knative*.yml' \\)""",
                             returnStdout: true
@@ -222,19 +383,69 @@ pipeline {
 
                         for (String deploymentFile in deploymentFiles) {
                             if (!deploymentFile) continue
-                            
-                            echo "Updating image tag in deployment file: ${deploymentFile}"
-                            
-                            // Update the image line in deployment files only
+
+                            echo "Updating image tag in: ${deploymentFile}"
+
                             sh """
                                 sed -i -E 's|^([[:space:]]*image:[[:space:]]*)[^[:space:]]*${serviceName}:[^[:space:]]+|\\1${newImageTag}|' "${deploymentFile}" || true
                             """
+
+                            // ---------------------------------------------------------
+                            // TEST 4: Verify το sed έκανε όντως την αλλαγή
+                            // Αποτρέπει silent failure όπου το sed δεν βρήκε το pattern
+                            // ---------------------------------------------------------
+                            echo "Verifying image tag update in ${deploymentFile}..."
+                            def tagFound = sh(
+                                script: "grep -c '${env.IMAGE_TAG}' \"${deploymentFile}\" || true",
+                                returnStdout: true
+                            ).trim()
+
+                            if (tagFound == '0') {
+                                error("Manifest update verification failed: '${env.IMAGE_TAG}' not found in ${deploymentFile}. The sed replacement may not have matched the expected pattern.")
+                            }
+                            echo "✓ Image tag verified in ${deploymentFile}"
+                        }
+
+                        // ---------------------------------------------------------
+                        // TEST 5: Kubernetes manifest dry-run validation
+                        // Βεβαιώνει ότι τα YAMLs είναι valid πριν το commit
+                        // ---------------------------------------------------------
+                        echo "Validating k8s manifests (dry-run) for ${serviceName}..."
+                        def kubectlAvailable = sh(script: 'command -v kubectl', returnStatus: true) == 0
+                        if (kubectlAvailable) {
+                            def dryRunResult = sh(
+                                script: "kubectl apply --dry-run=client -f ${k8sServiceDir}/ 2>&1",
+                                returnStatus: true
+                            )
+                            if (dryRunResult != 0) {
+                                error("kubectl dry-run validation failed for ${k8sServiceDir}/. Fix manifest errors before committing.")
+                            }
+                            echo "✓ kubectl dry-run passed for ${serviceName}"
+                        } else {
+                            echo "⚠ kubectl not found — skipping manifest dry-run validation."
                         }
                     }
 
                     echo "\n✓ Manifests updated successfully"
 
-                    // Commit and push changes to master branch
+                    // ---------------------------------------------------------
+                    // TEST 6: Έλεγχος ότι δεν staged αρχεία εκτός k8s/
+                    // Αποτρέπει accidental commits σε λάθος directories
+                    // ---------------------------------------------------------
+                    sh 'git add k8s/'
+
+                    echo "Checking for unexpected staged files outside k8s/..."
+                    def unexpectedChanges = sh(
+                        script: "git diff --cached --name-only | grep -v '^k8s/' || true",
+                        returnStdout: true
+                    ).trim()
+
+                    if (unexpectedChanges) {
+                        error("Unexpected files staged for commit (outside k8s/):\n${unexpectedChanges}\nAbort to prevent unintended changes.")
+                    }
+                    echo "✓ Only k8s/ files are staged"
+
+                    // Commit and push
                     echo "\nCommitting k8s manifest updates to repository..."
                     withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
                         sh '''#!/bin/bash
@@ -250,9 +461,7 @@ pipeline {
                             echo "Working tree status (before add):"
                             git status --porcelain || true
 
-                            git add k8s/
-
-                            echo "Staged files:" 
+                            echo "Staged files:"
                             git diff --cached --name-only || true
 
                             if ! git diff --cached --quiet; then
@@ -269,6 +478,11 @@ pipeline {
             }
         }
 
+        // =========================================================
+        // STAGE: Trigger Update Manifests Pipeline
+        // wait: true + propagate: false → ξέρουμε αν triggered,
+        // αλλά δεν fail-άρει το build αν το downstream αποτύχει
+        // =========================================================
         stage('Trigger Update Manifests Pipeline') {
             when {
                 expression { env.ROOT_SERVICE_CHANGES == 'true' || env.K8S_CHANGES == 'true' }
@@ -277,13 +491,14 @@ pipeline {
                 script {
                     echo "\n=== Triggering Update Manifests Pipeline ==="
                     echo "Reason: ROOT_SERVICE_CHANGES=${env.ROOT_SERVICE_CHANGES}, K8S_CHANGES=${env.K8S_CHANGES}"
-                    
+
                     try {
-                        build job: 'update-manifests', wait: false
+                        // wait: true → επιβεβαιώνει ότι το job triggered και ξεκίνησε
+                        // propagate: false → δεν κληρονομούμε failure από το downstream
+                        build job: 'update-manifests', wait: true, propagate: false
                         echo "✓ Update manifests pipeline triggered successfully"
                     } catch (Exception e) {
                         echo "⚠ Warning: Could not trigger update-manifests pipeline: ${e.message}"
-                        // Don't fail the entire build if downstream job trigger fails
                     }
                 }
             }
@@ -296,6 +511,12 @@ pipeline {
                 sh 'command -v docker >/dev/null 2>&1 && docker logout || true'
                 sh 'command -v docker >/dev/null 2>&1 && docker image prune -a -f || true'
             }
+        }
+        success {
+            echo "\n✓ Pipeline completed successfully — Build: ${env.BUILD_NUMBER}, Tag: ${env.IMAGE_TAG}"
+        }
+        failure {
+            echo "\n✗ Pipeline failed — Build: ${env.BUILD_NUMBER}. Check logs above for details."
         }
     }
 }
