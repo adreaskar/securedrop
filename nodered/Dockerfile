@@ -20,7 +20,7 @@ RUN npm install \
     @stormpass/node-red-contrib-amqp \
     @reggae_ulli/node-red-contrib-minio-all-fix
 
-# 3. Create a seed directory to hold our configs
+#3. Create a seed directory to hold our configs
 RUN mkdir -p /usr/src/node-red/seed_config
 
 # 4. Copy configs to the seed directory
