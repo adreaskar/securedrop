@@ -412,21 +412,21 @@ pipeline {
                         }
 
                         // ---------------------------------------------------------
-                        // TEST 5: kubectl dry-run manifest validation
+                        // TEST 5: kubeval manifest validation (no cluster needed)
                         // ---------------------------------------------------------
-                        echo "Validating k8s manifests (dry-run) for ${serviceName}..."
-                        def kubectlAvailable = sh(script: 'command -v kubectl', returnStatus: true) == 0
-                        if (kubectlAvailable) {
-                            def dryRunResult = sh(
-                                script: "kubectl apply --dry-run=client -f ${k8sServiceDir}/ 2>&1",
+                        echo "Validating k8s manifests (kubeval) for ${serviceName}..."
+                        def kubevalAvailable = sh(script: 'command -v kubeval', returnStatus: true) == 0
+                        if (kubevalAvailable) {
+                            def kubevalResult = sh(
+                                script: "find ${k8sServiceDir} -name '*.yaml' -o -name '*.yml' | xargs kubeval --strict 2>&1",
                                 returnStatus: true
                             )
-                            if (dryRunResult != 0) {
-                                error("kubectl dry-run validation failed for ${k8sServiceDir}/.")
+                            if (kubevalResult != 0) {
+                                error("kubeval validation failed for ${k8sServiceDir}/.")
                             }
-                            echo "✓ kubectl dry-run passed for ${serviceName}"
+                            echo "✓ kubeval passed for ${serviceName}"
                         } else {
-                            echo "⚠ kubectl not found — skipping manifest dry-run validation."
+                            echo "⚠ kubeval not found — skipping manifest validation."
                         }
                     }
 
