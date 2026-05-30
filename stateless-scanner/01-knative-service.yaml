@@ -30,7 +30,7 @@ spec:
       timeoutSeconds: 300
       containers:
         - name: securedrop-scanner
-          image: securedropgr/stateless-scanner:120-0f0c92b
+          image: securedropgr/stateless-scanner:133-2e97558
           command:
             - /bin/sh
             - -c
