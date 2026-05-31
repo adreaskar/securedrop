@@ -33,7 +33,7 @@ spec:
               mountPath: /data
       containers:
         - name: nodered
-          image: securedropgr/nodered:116-ae4dbff
+          image: securedropgr/nodered:142-5ec42da
           resources:
             requests:
               memory: "128Mi"
