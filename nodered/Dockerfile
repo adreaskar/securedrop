@@ -10,10 +10,7 @@ USER node-red
 
 # Install npm packages & create seed directory
 RUN npm install \
-    clamscan@2.4.0 \
-    node-red-node-aws@0.4.0 \
     @stormpass/node-red-contrib-amqp@1.4.1 \
-    @reggae_ulli/node-red-contrib-minio-all-fix@0.0.4 \
     && mkdir -p /usr/src/node-red/seed_config
 
 # Copy configs
