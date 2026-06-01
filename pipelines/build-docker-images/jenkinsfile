@@ -494,26 +494,31 @@ pipeline {
                     withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
                         sh '''#!/bin/bash
                             set -euo pipefail
-
-                            # Save the current workspace directory (where k8s/ is located)
-                            SOURCE_K8S_PATH="$(pwd)/k8s"
-
                             mkdir -p ~/.ssh
                             ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
                             export GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 
-                            # Clone the manifests branch to a sibling directory
-                            rm -rf ../manifests-repo
-                            git clone --branch manifests git@github.com:adreaskar/securedrop.git ../manifests-repo
+                            # Use Jenkins WORKSPACE variable for reliable paths
+                            WORK_DIR=$(dirname "${WORKSPACE}")
+                            MANIFESTS_DIR="${WORK_DIR}/manifests-repo"
+                            SOURCE_K8S="${WORKSPACE}/k8s"
 
-                            echo "Syncing k8s folder from ${SOURCE_K8S_PATH} to manifests repo root..."
+                            rm -rf "${MANIFESTS_DIR}"
+                            git clone --branch manifests git@github.com:adreaskar/securedrop.git "${MANIFESTS_DIR}"
 
-                            cd ../manifests-repo
+                            echo "Syncing k8s folder from ${SOURCE_K8S} to ${MANIFESTS_DIR}..."
+                            cd "${MANIFESTS_DIR}"
                             git config user.email "jenkins@securedrop.local"
                             git config user.name "Jenkins CI"
 
+                            # Verify source exists before rsync
+                            if [ ! -d "${SOURCE_K8S}" ]; then
+                                echo "ERROR: Source k8s directory not found at ${SOURCE_K8S}"
+                                exit 1
+                            fi
+
                             # Sync k8s/ from source into manifests branch root
-                            rsync -a --delete --exclude '.git/' "${SOURCE_K8S_PATH}/" ./
+                            rsync -av --delete --exclude '.git/' "${SOURCE_K8S}/" ./
 
                             if git status --porcelain | grep -q .; then
                                 echo "✓ K8s changes detected, committing..."
