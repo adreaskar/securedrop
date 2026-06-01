@@ -72,7 +72,6 @@ pipeline {
 
         // =========================================================
         // STAGE: Pre-flight Validation
-        // Fail fast πριν χαθεί χρόνος σε build
         // =========================================================
         stage('Pre-flight Validation') {
             when {
@@ -482,22 +481,47 @@ pipeline {
         }
 
         // =========================================================
-        // STAGE: Trigger Update Manifests Pipeline
+        // STAGE: Sync k8s to manifests branch
         // =========================================================
-        stage('Trigger Update Manifests Pipeline') {
+        stage('Sync k8s to manifests branch') {
             when {
                 expression { env.ROOT_SERVICE_CHANGES == 'true' || env.K8S_CHANGES == 'true' }
             }
             steps {
                 script {
-                    echo "\n=== Triggering Update Manifests Pipeline ==="
-                    echo "Reason: ROOT_SERVICE_CHANGES=${env.ROOT_SERVICE_CHANGES}, K8S_CHANGES=${env.K8S_CHANGES}"
+                    echo "\n=== Syncing k8s folder to manifests branch ==="
 
-                    try {
-                        build job: 'update-manifests', wait: true, propagate: false
-                        echo "✓ Update manifests pipeline triggered successfully"
-                    } catch (Exception e) {
-                        echo "⚠ Warning: Could not trigger update-manifests pipeline: ${e.message}"
+                    withCredentials([sshUserPrivateKey(credentialsId: params.CREDENTIAL_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+                        sh '''#!/bin/bash
+                            set -euo pipefail
+
+                            mkdir -p ~/.ssh
+                            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+                            export GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+                            # Clone the manifests branch to a temp directory
+                            rm -rf ../manifests-repo
+                            git clone --branch manifests git@github.com:adreaskar/securedrop.git ../manifests-repo
+
+                            echo "Syncing k8s folder from $(pwd)/k8s to manifests repo root..."
+
+                            cd ../manifests-repo
+                            git config user.email "jenkins@securedrop.local"
+                            git config user.name "Jenkins CI"
+
+                            # Sync k8s/ from source into manifests branch root
+                            rsync -a --delete --exclude '.git/' ../securedrop/k8s/ ./
+
+                            if git status --porcelain | grep -q .; then
+                                echo "✓ K8s changes detected, committing..."
+                                git add -A
+                                git commit -m "CI: Sync k8s folder from master - build ${BUILD_NUMBER}"
+                                git push origin manifests
+                                echo "✓ Manifests branch updated successfully"
+                            else
+                                echo "No manifest changes detected after sync"
+                            fi
+                        '''
                     }
                 }
             }
