@@ -38,7 +38,7 @@ sla measurements/
 ├── results/
 │   ├── warm_final.csv                 # Scenario A results (21 samples)
 │   ├── cold_clean.csv                 # Scenario B results (30 samples)
-│   ├── concurrent_final.csv           # Scenario C results (10 samples)
+│   ├── concurrent_final.csv           # Scenario C results (20 samples)
 │   ├── minscale1_clean.csv            # Scenario D results (29 samples)
 │   └── sla_cdf_plot.png               # CDF plot (all 4 scenarios)
 ```
@@ -203,13 +203,12 @@ OUTPUT=results/concurrent_final.csv \
 > so the Knative scanner receives requests one at a time. The `containerConcurrency=5`
 > setting is never utilized — Node-RED is the bottleneck, not the scanner.
 
-> **Note on sample count:** Out of 30 upload attempts (3 batches × 10
-> concurrent uploads), only 10 were successfully matched to a status-change
-> event during log polling — the rest were dropped by a race condition in
-> the polling script when multiple status updates land in the same log
-> window. `results/concurrent_final.csv` reflects only the 10 confirmed
-> samples. Treat Bronze SLA numbers as **provisional** until the polling
-> script is fixed and the test re-run with the full 30 samples.
+> **Sample count:** Of 30 upload attempts (3 batches × 10 concurrent
+> uploads), 20 were successfully matched to a status-change event during
+> log polling. The remaining 10 were dropped by a race condition in the
+> polling script when multiple status updates land in the same log window.
+> `results/concurrent_final.csv` contains the 20 confirmed samples used
+> for all SLA calculations below.
 
 ---
 
@@ -265,11 +264,8 @@ python3 scripts/analyze_sla.py \
 |---|---|---|---|---|---|---|
 | Other (Warm, scale-to-zero, unstable) | 21 | 7.1s | 4.2s | 15.4s | 34.3s | 39.1s |
 | Silver (Cold start) | 30 | 13.5s | 12.8s | 21.9s | 22.8s | 22.8s |
-| Bronze (10× concurrent)¹ | 10 | — | 19.3s | 29.1s | 30.1s | — |
+| Bronze (10× concurrent) | 20 | 10.9s | 10.0s | 23.4s | 26.9s | 27.8s |
 | Gold (min-scale=1) | 29 | 4.3s | 3.8s | 6.4s | 7.8s | 8.3s |
-
-¹ Provisional — see sample-count note in Scenario C above. Mean/Max not
-yet recomputed for the reduced N=10 set; re-run before final submission.
 
 ### SLA Class definitions
 
@@ -277,11 +273,8 @@ yet recomputed for the reduced N=10 set; re-run before final submission.
 |---|---|---|---|
 | **Gold** | min-scale=1 (always warm) | ≥1 pod always running | ≤ 8s |
 | **Silver** | Cold start (scale-to-zero) | Pod starts from zero | ≤ 23s |
-| **Bronze** | 10× concurrent burst | 10 parallel uploads | ≤ 30.5s¹ |
+| **Bronze** | 10× concurrent burst | 10 parallel uploads | ≤ 27s |
 | **Other** (unclassified) | Warm, scale-to-zero, no buffer | min-scale=0, short interval between runs | not eligible — see Finding 1 |
-
-¹ Updated from ≤27s after the Bronze re-measurement; confirm once the
-full 30-sample run replaces the current N=10 provisional set.
 
 ### Key findings
 
