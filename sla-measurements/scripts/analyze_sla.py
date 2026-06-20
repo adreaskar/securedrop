@@ -7,10 +7,10 @@ Usage:
 
 Example:
   python3 analyze_sla.py \
-    "Gold (Warm)":results/warm_final.csv \
+    "Gold (min-scale=1)":results/minscale1_clean.csv \
     "Silver (Cold)":results/cold_clean.csv \
     "Bronze (Concurrent)":results/concurrent_final.csv \
-    "Gold+ (min-scale=1)":results/minscale1_clean.csv \
+    "Other (Warm, no buffer)":results/warm_final.csv \
     --output results/sla_cdf_plot.png
 """
 
@@ -151,7 +151,7 @@ def plot_cdf(scenarios, output='sla_cdf_plot.png'):
         ax.text(x_max * 1.115, prob, lbl,
                 fontsize=9, color='gray', va='center', ha='right')
 
-    # ── Stats box (top-left) ─────────────────────────────────────────────────
+    # ── Stats box (center-right, clear of the Bronze rising edge) ───────────
     header = f"{'Scenario':<24} {'N':>3}  {'P50':>6}  {'P95':>6}  {'P99':>6}"
     sep    = '─' * len(header)
     rows   = [header, sep]
@@ -159,10 +159,11 @@ def plot_cdf(scenarios, output='sla_cdf_plot.png'):
         short = label[:23]
         rows.append(f"{short:<24} {n:>3}  {p50:>5.1f}s  {p95:>5.1f}s  {p99:>5.1f}s")
 
-    ax.text(0.015, 0.985, '\n'.join(rows),
+    ax.text(0.965, 0.56, '\n'.join(rows),
             transform=ax.transAxes,
             fontsize=8.5,
-            verticalalignment='top',
+            verticalalignment='center',
+            horizontalalignment='right',
             fontfamily='monospace',
             bbox=dict(boxstyle='round,pad=0.5',
                       facecolor='white', alpha=0.92,

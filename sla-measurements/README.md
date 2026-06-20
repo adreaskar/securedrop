@@ -38,7 +38,7 @@ sla measurements/
 ├── results/
 │   ├── warm_final.csv                 # Scenario A results (21 samples)
 │   ├── cold_clean.csv                 # Scenario B results (30 samples)
-│   ├── concurrent_final.csv           # Scenario C results (20 samples)
+│   ├── concurrent_final.csv           # Scenario C results (10 samples)
 │   ├── minscale1_clean.csv            # Scenario D results (29 samples)
 │   └── sla_cdf_plot.png               # CDF plot (all 4 scenarios)
 ```
@@ -112,10 +112,13 @@ done
 
 ---
 
-## Scenario A — Warm execution (Gold SLA)
+## Scenario A — Warm execution, scale-to-zero (unstable / "Other")
 
-The scanner pod is already running before each upload.
-Measures steady-state latency without cold-start overhead.
+The scanner pod *may* already be running before each upload, or may have
+just scaled to zero — this scenario does **not** force a known pod state,
+it simply re-uploads at short intervals while `min-scale=0`. As shown
+below, this produces unpredictable, bimodal latency and is **not** assigned
+an SLA class.
 
 ```bash
 chmod +x scripts/measure_warm_sla_unique.sh
@@ -200,9 +203,17 @@ OUTPUT=results/concurrent_final.csv \
 > so the Knative scanner receives requests one at a time. The `containerConcurrency=5`
 > setting is never utilized — Node-RED is the bottleneck, not the scanner.
 
+> **Note on sample count:** Out of 30 upload attempts (3 batches × 10
+> concurrent uploads), only 10 were successfully matched to a status-change
+> event during log polling — the rest were dropped by a race condition in
+> the polling script when multiple status updates land in the same log
+> window. `results/concurrent_final.csv` reflects only the 10 confirmed
+> samples. Treat Bronze SLA numbers as **provisional** until the polling
+> script is fixed and the test re-run with the full 30 samples.
+
 ---
 
-## Scenario D — Always-warm (min-scale=1 comparison)
+## Scenario D — Always-warm (min-scale=1 → Gold SLA)
 
 Tests the alternative autoscaling strategy where a minimum of 1 pod is
 always running (no scale-to-zero). Supports section 6.6 of the design document.
@@ -233,12 +244,16 @@ microk8s kubectl annotate ksvc securedrop-scanner -n default \
 
 ## CDF Analysis
 
+The label passed before each `:csvfile` on the command line is the literal
+string used in the plot legend/stats box — **it must match the SLA class
+table below**, not the order the scenarios were measured in.
+
 ```bash
 python3 scripts/analyze_sla.py \
-  "Gold (Warm)":results/warm_final.csv \
+  "Gold (min-scale=1)":results/minscale1_clean.csv \
   "Silver (Cold)":results/cold_clean.csv \
   "Bronze (Concurrent)":results/concurrent_final.csv \
-  "Gold+ (min-scale=1)":results/minscale1_clean.csv \
+  "Other (Warm, no buffer)":results/warm_final.csv \
   --output results/sla_cdf_plot.png
 ```
 
@@ -248,34 +263,42 @@ python3 scripts/analyze_sla.py \
 
 | Scenario | N | Mean | P50 | P95 | P99 | Max |
 |---|---|---|---|---|---|---|
-| Gold (Warm, scale-to-zero) | 21 | 7.1s | 4.2s | 15.4s | 34.3s | 39.1s |
+| Other (Warm, scale-to-zero, unstable) | 21 | 7.1s | 4.2s | 15.4s | 34.3s | 39.1s |
 | Silver (Cold start) | 30 | 13.5s | 12.8s | 21.9s | 22.8s | 22.8s |
-| Bronze (10× concurrent) | 20 | 10.9s | 10.0s | 23.4s | 26.9s | 27.8s |
-| Gold+ (min-scale=1) | 29 | 4.3s | 3.8s | 6.4s | 7.8s | 8.3s |
+| Bronze (10× concurrent)¹ | 10 | — | 19.3s | 29.1s | 30.1s | — |
+| Gold (min-scale=1) | 29 | 4.3s | 3.8s | 6.4s | 7.8s | 8.3s |
+
+¹ Provisional — see sample-count note in Scenario C above. Mean/Max not
+yet recomputed for the reduced N=10 set; re-run before final submission.
 
 ### SLA Class definitions
 
 | Class | Scenario | Condition | P99 target |
 |---|---|---|---|
-| **Gold+** | min-scale=1 (always warm) | ≥1 pod always running | ≤ 8s |
+| **Gold** | min-scale=1 (always warm) | ≥1 pod always running | ≤ 8s |
 | **Silver** | Cold start (scale-to-zero) | Pod starts from zero | ≤ 23s |
-| **Bronze** | 10× concurrent burst | 10 parallel uploads | ≤ 27s |
+| **Bronze** | 10× concurrent burst | 10 parallel uploads | ≤ 30.5s¹ |
+| **Other** (unclassified) | Warm, scale-to-zero, no buffer | min-scale=0, short interval between runs | not eligible — see Finding 1 |
+
+¹ Updated from ≤27s after the Bronze re-measurement; confirm once the
+full 30-sample run replaces the current N=10 provisional set.
 
 ### Key findings
 
-**1. scale-to-zero without min-scale=1 is unpredictable.**
-The "Gold (Warm)" scenario has P99=34s — worse than Cold (P99=23s).
+**1. scale-to-zero without min-scale=1 is unpredictable — not a Gold strategy.**
+The "Other (Warm)" scenario has P99=34.3s — worse than Cold (P99=22.8s).
 Its bimodal CDF reveals that scale-to-zero occasionally fires between
-sequential test runs, causing hidden cold starts. The high stdev (8.1s)
-confirms this instability.
+sequential test runs, causing hidden cold starts. The high stdev (~8s)
+confirms this instability. This scenario is deliberately excluded from
+the SLA class table.
 
-**2. min-scale=1 is the only reliable "Gold" strategy.**
+**2. min-scale=1 is the only reliable Gold strategy.**
 P99=7.8s with stdev=1.3s. Consistent, predictable, no cold-start variance.
 Trade-off: one pod always running = higher resource cost.
 
 **3. Concurrent bottleneck is Node-RED, not the scanner.**
 Node-RED processes RabbitMQ messages serially (prefetch=1). Under 10
-concurrent uploads, the 10th file waits ~9 × scan_time in the queue.
+concurrent uploads, later files wait several × scan_time in the queue.
 Only 1 Knative pod is ever needed — the autoscaler never triggers
 scale-up because requests arrive sequentially at the scanner.
 
