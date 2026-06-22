@@ -123,7 +123,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5 text-primary" />
-          Send Secure File
+          Send Secure File (Live!)
         </CardTitle>
         <CardDescription>
           Upload a file to send securely. It will be scanned for threats before
@@ -138,8 +138,8 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
               dragActive
                 ? "border-primary bg-primary/5"
                 : file
-                ? "border-primary/50 bg-primary/5"
-                : "border-border hover:border-primary/50 hover:bg-accent/50"
+                  ? "border-primary/50 bg-primary/5"
+                  : "border-border hover:border-primary/50 hover:bg-accent/50"
             }`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
