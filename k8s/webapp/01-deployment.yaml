@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: securedrop-webapp
-          image: securedropgr/webapp:171-6d4f245
+          image: securedropgr/webapp:173-ade0372
           ports:
             - containerPort: 80
           resources:
